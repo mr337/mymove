@@ -35,7 +35,6 @@ const dropDownChildren = (swaggerField, filteredEnumListOverride, props) => {
   /* eslint-disable security/detect-object-injection */
   return (
     <Fragment>
-      <option />
       {(filteredEnumListOverride ? filteredEnumListOverride : swaggerField.enum).map(e => (
         <option key={e} value={e}>
           {swaggerField['x-display-value'][e]}
