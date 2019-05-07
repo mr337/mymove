@@ -54,7 +54,7 @@ function officeUserCreatesPreApprovalRequest() {
 
   fillAndSavePreApprovalRequest();
   // Verify data has been saved in the UI
-  cy.get('tr[data-cy="130B"]').should(td => {
+  cy.get('tr[data-test="130B"]').should(td => {
     const text = td.text();
     expect(text).to.include('Bulky Article: Motorcycle/Rec vehicle');
   });
@@ -87,7 +87,7 @@ function officeUserEditsPreApprovalRequest() {
 
   editPreApprovalRequest();
   // Verify data has been saved in the UI
-  cy.get('tr[data-cy="130B"]').should(td => {
+  cy.get('tr[data-test="130B"]').should(td => {
     const text = td.text();
     expect(text).to.include('edited');
   });
@@ -240,7 +240,7 @@ function officeUserCreates35APreApprovalRequest() {
 
   // The edit should propagate to the Invoice panel
   cy
-    .get('[data-cy=unbilled-table] tbody')
+    .get('[data-test=unbilled-table] tbody')
     .contains('$220.00')
     .should('exist');
 
@@ -268,7 +268,7 @@ function officeUserCreates35APreApprovalRequest() {
 
   // The edit should propagate to the Invoice panel
   cy
-    .get('[data-cy=unbilled-table] tbody')
+    .get('[data-test=unbilled-table] tbody')
     .contains('Missing actual amount')
     .parent();
 }

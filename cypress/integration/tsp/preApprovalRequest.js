@@ -66,7 +66,7 @@ function tspUserCreatesPreApprovalRequest() {
 
   fillAndSavePreApprovalRequest();
   // Verify data has been saved in the UI
-  cy.get('tr[data-cy="130B"]').should(td => {
+  cy.get('tr[data-test="130B"]').should(td => {
     const text = td.text();
     expect(text).to.include('Bulky Article: Motorcycle/Rec vehicle');
   });
@@ -87,7 +87,7 @@ function tspUserEditsPreApprovalRequest() {
 
   editPreApprovalRequest();
   // Verify data has been saved in the UI
-  cy.get('tr[data-cy="130B"]').should(td => {
+  cy.get('tr[data-test="130B"]').should(td => {
     const text = td.text();
     expect(text).to.include('edited');
   });

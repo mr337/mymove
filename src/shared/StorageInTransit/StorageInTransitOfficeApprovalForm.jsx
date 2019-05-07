@@ -10,7 +10,7 @@ export class StorageInTransitOfficeApprovalForm extends Component {
     const { storageInTransitSchema } = this.props;
     return (
       <form
-        data-cy="storage-in-transit-office-approval-form"
+        data-test="storage-in-transit-office-approval-form"
         onSubmit={this.props.handleSubmit(this.props.onSubmit)}
         className="storage-in-transit-form"
       >

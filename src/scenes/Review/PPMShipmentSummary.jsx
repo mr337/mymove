@@ -33,7 +33,7 @@ function PPMShipmentSummary(props) {
         <p className="heading">
           Dates & Locations
           <span className="edit-section-link">
-            <Link data-cy="edit-ppm-dates" to={editDateAndLocationAddress}>
+            <Link data-test="edit-ppm-dates" to={editDateAndLocationAddress}>
               Edit
             </Link>
           </span>
@@ -73,7 +73,7 @@ function PPMShipmentSummary(props) {
         <p className="heading">
           Weight
           <span className="edit-section-link">
-            <Link data-cy="edit-ppm-weight" to={editWeightAddress}>
+            <Link data-test="edit-ppm-weight" to={editWeightAddress}>
               Edit
             </Link>
           </span>

@@ -2,7 +2,7 @@
 describe('Office ppm queue', () => {
   beforeEach(() => {
     cy.signIntoOffice();
-    cy.get('[data-cy=ppm-queue]').click();
+    cy.get('[data-test=ppm-queue]').click();
   });
 
   it('does not have a GBL column', checkForGBLColumn);
@@ -15,12 +15,12 @@ function checkForGBLColumn() {
 
 function checkIcons() {
   cy.wait(1000);
-  cy.get('[data-cy=ppm-queue-icon]').each((el, index, list) => {
+  cy.get('[data-test=ppm-queue-icon]').each((el, index, list) => {
     cy
       .wrap(el)
       .closest('.rt-td')
       .next('.rt-td')
-      .find('[data-cy=status]')
+      .find('[data-test=status]')
       .should(status => {
         expect(status.text()).to.match(/Payment requested|Submitted/);
       });

@@ -4,7 +4,7 @@ import { formatDate } from 'shared/formatters';
 export const Code125Details = props => {
   const row = props.shipmentLineItem;
   return (
-    <td data-cy={`${row.tariff400ng_item.code}-details`}>
+    <td data-test={`${row.tariff400ng_item.code}-details`}>
       {row.reason} <br />
       {`Date of service: ${formatDate(row.date)}`} <br />
       {row.time && (

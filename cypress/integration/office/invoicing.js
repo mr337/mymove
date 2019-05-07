@@ -21,7 +21,7 @@ function checkNoUnbilledLineItems() {
 
   // The invoice table should be empty.
   cy
-    .get('[data-cy=invoice-panel] [data-cy=basic-panel-content]')
+    .get('[data-test=invoice-panel] [data-test=basic-panel-content]')
     .find('span.empty-content')
     .should('have.text', 'No line items');
 }
@@ -32,7 +32,7 @@ function checkExistUnbilledLineItems() {
 
   // The invoice table should display the unbilled line items.
   cy
-    .get('[data-cy=invoice-panel] [data-cy=basic-panel-content] tbody')
+    .get('[data-test=invoice-panel] [data-test=basic-panel-content] tbody')
     .children()
     // For each line item, I should see item code, description, etc.
     .each((row, index, lst) => {
@@ -56,20 +56,20 @@ function checkApproveButton() {
   cy.patientVisit('/queues/new/moves/fb4105cf-f5a5-43be-845e-d59fdb34f31c/hhg');
 
   // The invoice tab should have a button with the correct text.
-  cy.get('[data-cy=invoice-panel__header-cont] button').should('have.text', 'Approve Payment');
+  cy.get('[data-test=invoice-panel__header-cont] button').should('have.text', 'Approve Payment');
 
   // Open shipments tab of move with no unbilled line items.
   cy.patientVisit('/queues/new/moves/6eee3663-1973-40c5-b49e-e70e9325b895/hhg');
 
   // The invoice tab should not have a button.
-  cy.get('[data-cy="invoice-panel__header-cont"] button').should('not.exist');
+  cy.get('[data-test="invoice-panel__header-cont"] button').should('not.exist');
 }
 
 function checkConfirmationDialogue() {
   // Open the shipments tab.
   cy.patientVisit('/queues/new/moves/fb4105cf-f5a5-43be-845e-d59fdb34f31c/hhg');
 
-  cy.get('[data-cy=invoice-panel]').within(() => {
+  cy.get('[data-test=invoice-panel]').within(() => {
     cy
       .get('button')
       .first()
@@ -99,11 +99,11 @@ function checkApproveInvoice() {
   cy.patientVisit('/queues/new/moves/fb4105cf-f5a5-43be-845e-d59fdb34f31c/hhg');
 
   // Within the unbilled line item table
-  cy.get('[data-cy="unbilled-table"]').within(() => {
+  cy.get('[data-test="unbilled-table"]').within(() => {
     // Count the number of unbilled line items and amount total (we'll use this later)
-    cy.get('tr[data-cy="table--item"]').as('unbilledItems');
+    cy.get('tr[data-test="table--item"]').as('unbilledItems');
     cy
-      .get('tr[data-cy="table--total"] td')
+      .get('tr[data-test="table--total"] td')
       .last()
       .as('unbilledTotal');
 
@@ -127,19 +127,19 @@ function checkApproveInvoice() {
   cy.get('div.usa-alert').should('contain', 'Success!');
 
   // Within the newly created invoice table
-  cy.get('[data-cy="invoice-table"]').within(() => {
+  cy.get('[data-test="invoice-table"]').within(() => {
     // Confirm invoice header is shown
-    cy.get('[data-cy="invoice--detail"]').should('exist');
+    cy.get('[data-test="invoice--detail"]').should('exist');
 
     // Confirm number of invoiced items matches previous unbilled amount
     cy.get('@unbilledItems').then($unbilledItems => {
-      cy.get('tr[data-cy="table--item"]').should('have.length', $unbilledItems.length);
+      cy.get('tr[data-test="table--item"]').should('have.length', $unbilledItems.length);
     });
 
     // Confirm total of invoiced matches previous unbilled amount
     cy.get('@unbilledTotal').then($unbilledTotal => {
       cy
-        .get('tr[data-cy="table--total"] td')
+        .get('tr[data-test="table--total"] td')
         .last()
         .should('have.text', $unbilledTotal.text());
     });

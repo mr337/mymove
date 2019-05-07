@@ -115,18 +115,18 @@ export class StorageInTransit extends Component {
     const { storageInTransit } = this.props;
     const { showTspEditForm, showOfficeEditForm, showApproveForm, showDenyForm, showPlaceInSitForm } = this.state;
     return (
-      <div data-cy="storage-in-transit" className="storage-in-transit">
+      <div data-test="storage-in-transit" className="storage-in-transit">
         <div className="column-head">
           {capitalize(storageInTransit.location)} SIT
           <span className="unbold">
             {' '}
-            <span className="sit-status-text" data-cy="sit-status-text">
+            <span className="sit-status-text" data-test="sit-status-text">
               Status:
             </span>{' '}
             {storageInTransit.status === 'REQUESTED' && <SitStatusIcon isTspSite={isTspSite} />}
           </span>
           {storageInTransit.status === 'APPROVED' ? (
-            <span data-cy="storage-in-transit-status">
+            <span data-test="storage-in-transit-status">
               <FontAwesomeIcon className="icon approval-ready" icon={faCheck} />
               Approved
             </span>
@@ -176,7 +176,7 @@ export class StorageInTransit extends Component {
             isTspSite &&
             storageInTransit.status === 'APPROVED' && (
               <span className="place-in-sit">
-                <a data-cy="place-in-sit-link" onClick={this.openPlaceInSitForm}>
+                <a data-test="place-in-sit-link" onClick={this.openPlaceInSitForm}>
                   <FontAwesomeIcon className="icon" icon={faSignInAlt} />
                   Place into SIT
                 </a>
@@ -251,13 +251,13 @@ export class StorageInTransit extends Component {
                   </div>
                   <div className="panel-field nested__same-font">
                     <span className="field-title unbold">Earliest start date</span>
-                    <span data-cy="sit-authorized-start-date" className="field-value">
+                    <span data-test="sit-authorized-start-date" className="field-value">
                       {formatDate4DigitYear(storageInTransit.authorized_start_date)}
                     </span>
                   </div>
                   <div className="panel-field nested__same-font">
                     <span className="field-title unbold">Note</span>
-                    <span data-cy="sit-authorization-notes" className="field-value">
+                    <span data-test="sit-authorization-notes" className="field-value">
                       {storageInTransit.authorization_notes}
                     </span>
                   </div>

@@ -106,7 +106,7 @@ class QueueTable extends Component {
                 accessor: row => row.synthetic_status,
                 Cell: row =>
                   row.value === 'PAYMENT_REQUESTED' || row.value === 'SUBMITTED' ? (
-                    <span data-cy="ppm-queue-icon">
+                    <span data-test="ppm-queue-icon">
                       <FontAwesomeIcon icon={faClock} style={{ color: 'orange' }} />
                     </span>
                   ) : (
@@ -119,7 +119,7 @@ class QueueTable extends Component {
                 Header: 'Status',
                 accessor: 'synthetic_status',
                 Cell: row => (
-                  <span className="status" data-cy="status">
+                  <span className="status" data-test="status">
                     {capitalize(row.value && row.value.replace('_', ' '))}
                   </span>
                 ),

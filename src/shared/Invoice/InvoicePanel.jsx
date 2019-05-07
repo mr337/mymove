@@ -58,7 +58,7 @@ export class InvoicePanel extends PureComponent {
     const hasUnbilled = Boolean(get(this.props, 'unbilledShipmentLineItems.length'));
     const hasInvoices = Boolean(get(this.props, 'invoices.length'));
     return (
-      <div className={styles['invoice-panel']} data-cy="invoice-panel">
+      <div className={styles['invoice-panel']} data-test="invoice-panel">
         <BasicPanel title="Invoicing">
           <InvoicePaymentAlert
             createInvoiceStatus={this.state.createInvoiceRequestStatus}

@@ -215,11 +215,11 @@ describe('The document viewer', function() {
         expect(loc.pathname).to.match(/^\/queues\/new\/moves\/[^/]+\/basics/);
       });
 
-      cy.get('[data-cy="hhg-tab"]').click();
+      cy.get('[data-test="hhg-tab"]').click();
 
       cy
-        .get('[data-cy=invoice-panel]')
-        .get('[data-cy=unbilled-table]')
+        .get('[data-test=invoice-panel]')
+        .get('[data-test=unbilled-table]')
         .find('tbody tr')
         .should(rows => {
           expect(rows).to.have.length.of.at.least(3);

@@ -19,7 +19,7 @@ class LineItemTable extends PureComponent {
         {this.props.title}
         <table cellSpacing={0} className={styles['invoice-panel__table']}>
           <tbody>
-            <tr data-cy="table--header">
+            <tr data-test="table--header">
               <th>Code</th>
               <th>Item</th>
               <th>Loc</th>
@@ -28,7 +28,7 @@ class LineItemTable extends PureComponent {
             </tr>
             {this.props.shipmentLineItems.map(item => {
               return (
-                <tr key={item.id} data-cy="table--item">
+                <tr key={item.id} data-test="table--item">
                   <td>{item.tariff400ng_item.code}</td>
                   <td>
                     {item.tariff400ng_item.item}
@@ -45,7 +45,7 @@ class LineItemTable extends PureComponent {
                 </tr>
               );
             })}
-            <tr data-cy="table--total">
+            <tr data-test="table--total">
               <td />
               <td>Total</td>
               <td />

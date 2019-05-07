@@ -53,7 +53,7 @@ export class UnbilledTable extends PureComponent {
       );
     } else {
       header = (
-        <div className={panelStyles['invoice-panel__header-cont']} data-cy="invoice-panel__header-cont">
+        <div className={panelStyles['invoice-panel__header-cont']} data-test="invoice-panel__header-cont">
           <div className="usa-width-one-half">
             <h5>Unbilled line items</h5>
           </div>
@@ -76,7 +76,7 @@ export class UnbilledTable extends PureComponent {
     }
 
     return (
-      <div className={panelStyles['invoice-panel__table-cont']} data-cy="unbilled-table">
+      <div className={panelStyles['invoice-panel__table-cont']} data-test="unbilled-table">
         {header}
         {itemsComponent}
       </div>

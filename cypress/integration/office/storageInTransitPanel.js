@@ -31,16 +31,16 @@ function officeUserViewsSITPanel() {
     expect(loc.pathname).to.match(/^\/queues\/new\/moves\/[^/]+\/basics/);
   });
 
-  cy.get('[data-cy="hhg-tab"]').click();
+  cy.get('[data-test="hhg-tab"]').click();
 
   cy.location().should(loc => {
     expect(loc.pathname).to.match(/^\/queues\/new\/moves\/[^/]+\/hhg/);
   });
-  cy.get('[data-cy=storage-in-transit-panel]').contains('Storage in Transit');
-  cy.get('[data-cy=storage-in-transit]').within(() => {
+  cy.get('[data-test=storage-in-transit-panel]').contains('Storage in Transit');
+  cy.get('[data-test=storage-in-transit]').within(() => {
     cy.contains('Destination SIT');
     cy
-      .get('[data-cy=sit-status-text]')
+      .get('[data-test=sit-status-text]')
       .contains('Status')
       .parent()
       .siblings()
@@ -82,7 +82,7 @@ function officeUserStartsAndCancelsSitApproval() {
     expect(loc.pathname).to.match(/^\/queues\/new\/moves\/[^/]+\/basics/);
   });
 
-  cy.get('[data-cy="hhg-tab"]').click();
+  cy.get('[data-test="hhg-tab"]').click();
 
   cy.location().should(loc => {
     expect(loc.pathname).to.match(/^\/queues\/new\/moves\/[^/]+\/hhg/);
@@ -92,7 +92,7 @@ function officeUserStartsAndCancelsSitApproval() {
     .get('a')
     .contains('Approve')
     .click()
-    .get('[data-cy=storage-in-transit]')
+    .get('[data-test=storage-in-transit]')
     .should($div => {
       const text = $div.text();
       expect(text).to.include('Approve SIT Request');
@@ -106,7 +106,7 @@ function officeUserStartsAndCancelsSitApproval() {
     .get('.usa-button-secondary')
     .contains('Cancel')
     .click()
-    .get('[data-cy=storage-in-transit-panel] [data-cy=add-request]')
+    .get('[data-test=storage-in-transit-panel] [data-test=add-request]')
     .should($div => {
       const text = $div.text();
       expect(text).to.not.include('Approve SIT Request');
@@ -125,14 +125,14 @@ function officeUserStartsAndCancelsSitEdit() {
     expect(loc.pathname).to.match(/^\/queues\/new\/moves\/[^/]+\/basics/);
   });
 
-  cy.get('[data-cy="hhg-tab"]').click();
+  cy.get('[data-test="hhg-tab"]').click();
 
   cy.location().should(loc => {
     expect(loc.pathname).to.match(/^\/queues\/new\/moves\/[^/]+\/hhg/);
   });
 
   cy
-    .get('[data-cy=storage-in-transit]')
+    .get('[data-test=storage-in-transit]')
     .contains('Edit')
     .click()
     .get('.sit-authorization')
@@ -145,7 +145,7 @@ function officeUserStartsAndCancelsSitEdit() {
     .get('.usa-button-secondary')
     .contains('Cancel')
     .click()
-    .get('[data-cy=storage-in-transit]')
+    .get('[data-test=storage-in-transit]')
     .should($div => {
       const text = $div.text();
       expect(text).to.include('Approved');
@@ -165,7 +165,7 @@ function officeUserApprovesSITRequest() {
     expect(loc.pathname).to.match(/^\/queues\/new\/moves\/[^/]+\/basics/);
   });
 
-  cy.get('[data-cy="hhg-tab"]').click();
+  cy.get('[data-test="hhg-tab"]').click();
 
   cy.location().should(loc => {
     expect(loc.pathname).to.match(/^\/queues\/new\/moves\/[^/]+\/hhg/);
@@ -175,7 +175,7 @@ function officeUserApprovesSITRequest() {
     .get('a')
     .contains('Approve')
     .click()
-    .get('[data-cy="storage-in-transit"]')
+    .get('[data-test="storage-in-transit"]')
     .should($div => {
       const text = $div.text();
       expect(text).to.include('Approve SIT Request');
@@ -188,14 +188,14 @@ function officeUserApprovesSITRequest() {
   cy.get('textarea[name="authorization_notes"]').type('this is a note', { force: true, delay: 150 });
 
   cy
-    .get('[data-cy="storage-in-transit-approve-button"]')
+    .get('[data-test="storage-in-transit-approve-button"]')
     .contains('Approve')
     .click();
 
   // Refresh browser and make sure changes persist
   cy.patientReload();
 
-  cy.get('[data-cy="storage-in-transit-status"]').contains('Approved');
-  cy.get('[data-cy="sit-authorized-start-date"]').contains('22-Mar-2019');
-  cy.get('[data-cy="sit-authorization-notes"]').contains('this is a note');
+  cy.get('[data-test="storage-in-transit-status"]').contains('Approved');
+  cy.get('[data-test="sit-authorized-start-date"]').contains('22-Mar-2019');
+  cy.get('[data-test="sit-authorization-notes"]').contains('this is a note');
 }

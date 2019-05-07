@@ -388,7 +388,7 @@ class MoveInfo extends Component {
           <div className="usa-width-three-fourths">
             <RoutedTabs startPathWith={this.props.match.url}>
               <NavTab to="/basics">
-                <span className="title" data-cy="basics-tab">
+                <span className="title" data-test="basics-tab">
                   Basics
                 </span>
                 <span className="status">
@@ -398,7 +398,7 @@ class MoveInfo extends Component {
               </NavTab>
               {(isPPM || isHHGPPM) && (
                 <NavTab to="/ppm">
-                  <span className="title" data-cy="ppm-tab">
+                  <span className="title" data-test="ppm-tab">
                     PPM
                   </span>
                   {this.renderPPMTabStatus()}
@@ -406,7 +406,7 @@ class MoveInfo extends Component {
               )}
               {(isHHG || isHHGPPM) && (
                 <NavTab to="/hhg">
-                  <span className="title" data-cy="hhg-tab">
+                  <span className="title" data-test="hhg-tab">
                     HHG
                   </span>
                   <span className="status">

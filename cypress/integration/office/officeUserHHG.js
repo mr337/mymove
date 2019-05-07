@@ -36,7 +36,7 @@ function officeUserViewsMoves() {
     expect(loc.pathname).to.match(/^\/queues\/new\/moves\/[^/]+\/basics/);
   });
 
-  cy.get('[data-cy="hhg-tab"]').click();
+  cy.get('[data-test="hhg-tab"]').click();
 
   cy.location().should(loc => {
     expect(loc.pathname).to.match(/^\/queues\/new\/moves\/[^/]+\/hhg/);
@@ -57,7 +57,7 @@ function officeUserViewsDeliveredShipment() {
     expect(loc.pathname).to.match(/^\/queues\/new\/moves\/[^/]+\/basics/);
   });
 
-  cy.get('[data-cy="hhg-tab"]').click();
+  cy.get('[data-test="hhg-tab"]').click();
 
   cy.location().should(loc => {
     expect(loc.pathname).to.match(/^\/queues\/new\/moves\/[^/]+\/hhg/);
@@ -78,7 +78,7 @@ function officeUserViewsCompletedShipment() {
     expect(loc.pathname).to.match(/^\/queues\/new\/moves\/[^/]+\/basics/);
   });
 
-  cy.get('[data-cy="hhg-tab"]').click();
+  cy.get('[data-test="hhg-tab"]').click();
 
   cy.location().should(loc => {
     expect(loc.pathname).to.match(/^\/queues\/new\/moves\/[^/]+\/hhg/);
@@ -99,7 +99,7 @@ function officeUserViewsAcceptedShipment() {
     expect(loc.pathname).to.match(/^\/queues\/new\/moves\/[^/]+\/basics/);
   });
 
-  cy.get('[data-cy="hhg-tab"]').click();
+  cy.get('[data-test="hhg-tab"]').click();
 
   cy.location().should(loc => {
     expect(loc.pathname).to.match(/^\/queues\/new\/moves\/[^/]+\/hhg/);
@@ -139,7 +139,7 @@ function officeUserApprovesOnlyBasicsHHG() {
   cy.get('.status').contains('Approved');
 
   // Click on HHG tab
-  cy.get('[data-cy="hhg-tab"]').click();
+  cy.get('[data-test="hhg-tab"]').click();
 
   cy.location().should(loc => {
     expect(loc.pathname).to.match(/^\/queues\/new\/moves\/[^/]+\/hhg/);
@@ -186,7 +186,7 @@ function officeUserApprovesHHG() {
   cy.get('.status').contains('Accepted');
 
   // Click on HHG tab
-  cy.get('[data-cy="hhg-tab"]').click();
+  cy.get('[data-test="hhg-tab"]').click();
 
   cy.location().should(loc => {
     expect(loc.pathname).to.match(/^\/queues\/new\/moves\/[^/]+\/hhg/);

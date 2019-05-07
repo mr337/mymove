@@ -136,7 +136,7 @@ function tspUserStartsAndCancelsSitPlaceInSit() {
   });
 
   cy
-    .get('[data-cy=storage-in-transit-panel] [data-cy=place-in-sit-link]')
+    .get('[data-test=storage-in-transit-panel] [data-test=place-in-sit-link]')
     .contains('Place into SIT')
     .click();
 
@@ -145,7 +145,7 @@ function tspUserStartsAndCancelsSitPlaceInSit() {
     .get('.usa-button-secondary')
     .contains('Cancel')
     .click()
-    .get('[data-cy=storage-in-transit-panel] [data-cy=place-in-sit-link]')
+    .get('[data-test=storage-in-transit-panel] [data-test=place-in-sit-link]')
     .should($div => {
       const text = $div.text();
       expect(text).to.not.include('Actual start date');
