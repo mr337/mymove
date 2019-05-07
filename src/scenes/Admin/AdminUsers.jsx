@@ -1,6 +1,6 @@
 import React from 'react';
 
-const AdminUsers = () => (
+export const AdminUsers = () => (
   <div>
     <h3>A-Team</h3>
     <ul>
@@ -14,5 +14,3 @@ const AdminUsers = () => (
     </ul>
   </div>
 );
-
-export default AdminUsers;
