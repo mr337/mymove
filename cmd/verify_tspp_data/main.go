@@ -7,14 +7,16 @@ import (
 	"time"
 
 	"github.com/gobuffalo/pop"
+	"github.com/gobuffalo/validate"
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
+	"go.uber.org/zap"
+
 	"github.com/transcom/mymove/pkg/models"
 	"github.com/transcom/mymove/pkg/rateengine"
 	"github.com/transcom/mymove/pkg/route"
 	"github.com/transcom/mymove/pkg/unit"
-	"go.uber.org/zap"
 )
 
 func main() {
@@ -50,7 +52,6 @@ func main() {
 
 	// Verify zips are present for zip list
 
-
 	// TODO: have to explicitly do pricing for SIT separately see it in accessorials.go file
 
 	// To price a shipment line item using the function ComputeShipmentLineItemCharge we need a Shipment
@@ -64,11 +65,10 @@ func main() {
 	netWeight := unit.Pound(3000)
 
 	// make a shipment with the following
-	pickupAddress := models.Address {
-		PostalCode:  "62225",
-
+	pickupAddress := models.Address{
+		PostalCode: "62225",
 	}
-	destinationAddress := models.Address {
+	destinationAddress := models.Address{
 		PostalCode: "36109",
 	}
 
@@ -76,25 +76,25 @@ func main() {
 	requestedPickup := time.Date(2019, time.June, 20, 0, 0, 0, 0, time.UTC)
 
 	/*
-	func CreateShipmentOffer(tx *pop.Connection,
-		shipmentID uuid.UUID,
-		tspID uuid.UUID,
-		tsppID uuid.UUID,
-		administrativeShipment bool) (*ShipmentOffer, error) {
-	 */
+		func CreateShipmentOffer(tx *pop.Connection,
+			shipmentID uuid.UUID,
+			tspID uuid.UUID,
+			tsppID uuid.UUID,
+			administrativeShipment bool) (*ShipmentOffer, error) {
+	*/
 
-	shipment := models.Shipment {
-		ID: uuid.Must(uuid.NewV4()),
-		NetWeight: &netWeight,
-		PickupAddress:  &pickupAddress,
-		Move: models.Move {
+	shipment := models.Shipment{
+		ID:            uuid.Must(uuid.NewV4()),
+		NetWeight:     &netWeight,
+		PickupAddress: &pickupAddress,
+		Move: models.Move{
 			Orders: models.Order{
 				NewDutyStation: models.DutyStation{
 					Address: destinationAddress,
 				},
 			},
 		},
-		BookDate: &bookDate,
+		BookDate:            &bookDate,
 		RequestedPickupDate: &requestedPickup,
 	}
 
@@ -117,16 +117,15 @@ func main() {
 
 	accepted := true
 	shipmentOffer := models.ShipmentOffer{
-		ShipmentID:                                 shipment.ID,
-		Shipment:                                   shipment,
-		TransportationServiceProviderPerformance:   tspp,
+		ShipmentID:                               shipment.ID,
+		Shipment:                                 shipment,
+		TransportationServiceProviderPerformance: tspp,
 		TransportationServiceProviderPerformanceID: tspp.ID,
 		AdministrativeShipment:                     false,
 		Accepted:                                   &accepted, // This is a Tri-state and new offers are always nil until accepted
 		RejectionReason:                            nil,
 	}
 	shipmentOffer.Shipment.ShipmentOffers = append(shipmentOffer.Shipment.ShipmentOffers, shipmentOffer)
-
 
 	// returns a pointer
 	//shipmentOffer := offer
@@ -142,7 +141,6 @@ func main() {
 	//     shipment := shipmentLineItem.Shipment
 	//     shipmentLineItem.Location == models.ShipmentLineItemLocationDESTINATION
 	//
-
 
 	engine := rateengine.NewRateEngine(db, logger)
 
@@ -160,12 +158,12 @@ func main() {
 			continue
 		}
 
-		shipmentLineItem := models.ShipmentLineItem {
+		shipmentLineItem := models.ShipmentLineItem{
 			ShipmentID:        shipment.ID,
 			Shipment:          shipment,
 			Tariff400ngItemID: fetchedItem.ID,
 			Tariff400ngItem:   fetchedItem,
-			Quantity1:		   unit.BaseQuantity(1670),
+			Quantity1:         unit.BaseQuantity(1670),
 		}
 		location := models.ShipmentLineItemLocationORIGIN
 		if isDestinationCode(shipmentLineItem.Tariff400ngItem.Code) {
@@ -173,9 +171,7 @@ func main() {
 		}
 		shipmentLineItem.Location = location
 
-		hereTestSuite := route.HereFullSuite{
-
-		}
+		hereTestSuite := route.HereFullSuite{}
 
 		var planner route.Planner
 		origin := shipment.PickupAddress
@@ -202,7 +198,6 @@ func main() {
 			sitDiscount,
 		)
 
-
 		computedPriceAndRate, err := engine.ComputeShipmentLineItemCharge(shipmentLineItem)
 		if err != nil {
 			fmt.Printf("ERROR: ComputeShipmentLineItemCharge(): %s\n", err.Error())
@@ -210,11 +205,9 @@ func main() {
 
 		shipmentLineItem.AmountCents = &computedPriceAndRate.Fee
 
-
 		fmt.Printf("line item %s - %s\n", shipmentLineItem.Tariff400ngItem.Code, baseLineItemCode.Description)
 		fmt.Printf("\t\t Price: %s, Discount rate: %s\n", shipmentLineItem.AmountCents.ToDollarString(), computedPriceAndRate.Rate.ToDollarString())
 	}
-
 
 	fmt.Println("Print examples")
 	fmt.Printf("Print examples: %v, Print examples: %v \n", db, err)
@@ -234,14 +227,13 @@ func main() {
 
 }
 
-
 // getATSP returns a TSPP that is valid for the TDL, doesn't do the full evaluation using quality bands or round robin
 // review awardqueue.go for the full functionality that goes into picking a TSPP.
 func getATSPP(tx *pop.Connection,
-			tdlID uuid.UUID,
-			bookDate time.Time,
-			requestedPickupDate time.Time) (
-			models.TransportationServiceProviderPerformance, error) {
+	tdlID uuid.UUID,
+	bookDate time.Time,
+	requestedPickupDate time.Time) (
+	models.TransportationServiceProviderPerformance, error) {
 
 	sql := `SELECT
 			tspp.*
@@ -268,8 +260,7 @@ func getATSPP(tx *pop.Connection,
 	return tspp, err
 }
 
-
-func isDestinationCode (a string) bool {
+func isDestinationCode(a string) bool {
 	destinationCodes := [2]string{"105C", "135B"}
 	for _, b := range destinationCodes {
 		if b == a {
@@ -278,7 +269,6 @@ func isDestinationCode (a string) bool {
 	}
 	return false
 }
-
 
 // determineTrafficDistributionList (based based off of function shipment.go::models.DetermineTrafficDistributionList)
 // attempts to find (or create) the TDL for a shipment.  Since some of
