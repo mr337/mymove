@@ -1,0 +1,8 @@
+export SECURE_MIGRATION_SOURCE=${SECURE_MIGRATION_SOURCE:-s3}
+export SECURE_MIGRATION_BUCKET_NAME="${SECURE_MIGRATION_BUCKET_NAME:-transcom-ppp-app-prod-us-west-2}"
+export PSQL_SSL_MODE=disable
+export DB_NAME="${DB_NAME_PROD_MIGRATIONS:-prod_migrations}"
+export DB_PORT="${DB_PORT_PROD_MIGRATIONS:-5434}"
+export PGPASSWORD=${DB_PASSWORD}
+
+echo "Running with db database migrations ${DB_NAME}."       
