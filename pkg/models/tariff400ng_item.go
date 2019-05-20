@@ -1,6 +1,7 @@
 package models
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/gobuffalo/pop"
@@ -121,8 +122,12 @@ func FetchTariff400ngItem(dbConnection *pop.Connection, id uuid.UUID) (Tariff400
 
 // FetchTariff400ngItemByCode returns a Tariff400ngItem for the given code
 func FetchTariff400ngItemByCode(dbConnection *pop.Connection, code string) (Tariff400ngItem, error) {
+	fmt.Printf("BEGIN: FetchTariff400ngItemByCode \n")
 	var item Tariff400ngItem
 	err := dbConnection.Where("code = ?", code).First(&item)
+	fmt.Printf("\n\nitem: %v\n", item)
+	fmt.Printf("\n\ndbConnection: %v\n", dbConnection)
 
+	fmt.Printf("END: FetchTariff400ngItemByCode \n")
 	return item, err
 }
