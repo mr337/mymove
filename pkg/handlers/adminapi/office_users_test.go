@@ -5,6 +5,7 @@ import (
 
 	officeuserop "github.com/transcom/mymove/pkg/gen/adminapi/adminoperations/office"
 	"github.com/transcom/mymove/pkg/handlers"
+	officeuserservice "github.com/transcom/mymove/pkg/services/office_user"
 	"github.com/transcom/mymove/pkg/testdatagen"
 )
 
@@ -18,7 +19,7 @@ func (suite *HandlerSuite) TestIndexOfficeUsersHandler() {
 		HTTPRequest: req,
 	}
 
-	handler := IndexOfficeUsersHandler{handlers.NewHandlerContext(suite.DB(), suite.TestLogger())}
+	handler := IndexOfficeUsersHandler{handlers.NewHandlerContext(suite.DB(), suite.TestLogger()), officeuserservice.NewOfficeUsersFetcher(suite.DB())}
 	response := handler.Handle(params)
 
 	suite.Assertions.IsType(&officeuserop.IndexOfficeUsersOK{}, response)

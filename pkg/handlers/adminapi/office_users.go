@@ -3,15 +3,18 @@ package adminapi
 import (
 	"github.com/go-openapi/runtime/middleware"
 
+	"github.com/transcom/mymove/pkg/auth"
 	officeuserop "github.com/transcom/mymove/pkg/gen/adminapi/adminoperations/office"
 	"github.com/transcom/mymove/pkg/gen/adminmessages"
 	"github.com/transcom/mymove/pkg/handlers"
 	"github.com/transcom/mymove/pkg/models"
+	"github.com/transcom/mymove/pkg/services"
 )
 
 // IndexOfficeUsersHandler returns a list of office users via GET /office_users
 type IndexOfficeUsersHandler struct {
 	handlers.HandlerContext
+	officeUsersFetcher services.OfficeUsersFetcher
 }
 
 func payloadForOfficeUserModel(ou models.OfficeUser) *adminmessages.OfficeUser {
@@ -28,10 +31,10 @@ func payloadForOfficeUserModel(ou models.OfficeUser) *adminmessages.OfficeUser {
 
 // Handle retrieves a list of office users
 func (h IndexOfficeUsersHandler) Handle(params officeuserop.IndexOfficeUsersParams) middleware.Responder {
-	db := h.DB()
-	var users []models.OfficeUser
+	session := auth.SessionFromRequestContext(params.HTTPRequest)
+	fetcher := h.officeUsersFetcher
+	users, err := fetcher.FetchOfficeUsers(session)
 
-	err := db.All(&users)
 	if err != nil {
 		return officeuserop.NewIndexOfficeUsersBadRequest()
 	}
