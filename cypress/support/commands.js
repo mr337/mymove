@@ -132,8 +132,8 @@ Cypress.Commands.add('selectQueueItemMoveLocator', moveLocator => {
   cy.waitForLoadingScreen();
 });
 
-Cypress.Commands.add('setFeatureFlag', (flagVal, url = '/queues/new') => {
-  cy.visit(`${url}?flag:${flagVal}`);
+Cypress.Commands.add('setFeatureFlag', (flagVal, url = '/queues/new', flagged = true) => {
+  cy.visit(`${url}?flag:${flagVal}=${flagged}`);
 });
 
 Cypress.Commands.add(

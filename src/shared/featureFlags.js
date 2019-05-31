@@ -15,6 +15,7 @@ const defaultFlags = {
   moveInfoComboButton: true,
   sitPanel: true,
   ppmPaymentRequest: true,
+  accessCodes: false,
 };
 
 const environmentFlags = {
@@ -26,11 +27,13 @@ const environmentFlags = {
 
   staging: Object.assign({}, defaultFlags, {
     ppmPaymentRequest: false,
+    accessCodes: false,
   }),
 
   production: Object.assign({}, defaultFlags, {
     sitPanel: false,
     ppmPaymentRequest: false,
+    accessCodes: false,
   }),
 };
 

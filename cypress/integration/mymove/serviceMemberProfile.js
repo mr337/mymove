@@ -2,9 +2,23 @@
 describe('setting up service member profile requiring an access code', function() {
   beforeEach(() => {
     cy.signInAsNewMilMoveUser();
+    cy.setFeatureFlag('accessCodes', '/');
   });
   it('progresses thru forms', function() {
     serviceMemberEntersAccessCode();
+    serviceMemberProfile();
+  });
+  it.skip('restarts app after every page', function() {
+    serviceMemberProfile(true);
+  });
+});
+
+describe('setting up service member profile not requiring an access code', function() {
+  beforeEach(() => {
+    cy.signInAsNewMilMoveUser();
+    cy.setFeatureFlag('accessCodes', '/', false);
+  });
+  it('progresses thru forms', function() {
     serviceMemberProfile();
   });
   it.skip('restarts app after every page', function() {

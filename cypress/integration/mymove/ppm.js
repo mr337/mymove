@@ -110,7 +110,7 @@ describe('completing the ppm flow', function() {
     cy.logout();
     //profile@comple.te
     cy.signInAsUserPostRequest(milmoveAppName, '8e0d7e98-134e-4b28-bdd1-7d6b1ff34f9e');
-    cy.setFeatureFlag('ppmPaymentRequest', '/');
+    cy.setFeatureFlag('ppmPaymentRequest', '/', false);
     cy.contains('Fort Gordon (from Yuma AFB)');
     cy.contains('Request Payment').click();
 

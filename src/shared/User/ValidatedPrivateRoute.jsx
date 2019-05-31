@@ -3,6 +3,7 @@ import { Route } from 'react-router-dom';
 import { connect } from 'react-redux';
 
 import { selectCurrentUser } from 'shared/Data/users';
+import { withContext } from 'shared/AppContext';
 import { get } from 'lodash';
 import SignIn from './SignIn';
 import AccessCode from './AccessCode';
@@ -11,9 +12,10 @@ import AccessCode from './AccessCode';
 // note that it does not work if the route is not inside a Switch
 class ValidatedPrivateRouteContainer extends React.Component {
   render() {
-    const { isLoggedIn, requiresAccessCode, accessCode, path, ...props } = this.props;
+    const { context, isLoggedIn, requiresAccessCode, accessCode, path, ...props } = this.props;
     if (!isLoggedIn) return <Route path={path} component={SignIn} />;
-    if (isLoggedIn && requiresAccessCode && !accessCode) return <Route path={path} component={AccessCode} />;
+    if (context.flags.accessCodes && isLoggedIn && requiresAccessCode && !accessCode)
+      return <Route path={path} component={AccessCode} />;
     return <Route {...props} />;
   }
 }
@@ -26,6 +28,6 @@ const mapStateToProps = state => {
     accessCode: get(serviceMember, 'access_code'),
   };
 };
-const ValidatedPrivateRoute = connect(mapStateToProps)(ValidatedPrivateRouteContainer);
+const ValidatedPrivateRoute = withContext(connect(mapStateToProps)(ValidatedPrivateRouteContainer));
 
 export default ValidatedPrivateRoute;
