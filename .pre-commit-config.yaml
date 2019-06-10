@@ -28,7 +28,7 @@ repos:
         exclude: public/swagger-ui/*
 
   - repo: git://github.com/golangci/golangci-lint
-    rev: v1.16.0
+    rev: v1.17.1
     hooks:
       - id: golangci-lint
 
