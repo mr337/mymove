@@ -1,6 +1,6 @@
 NAME = ppp
 DB_NAME_DEV = dev_db
-DB_NAME_PROD_MIGRATIONS = prod_migrations
+DB_NAME_PROD_MIGRATIONS ?= prod_migrations
 DB_NAME_TEST = test_db
 DB_DOCKER_CONTAINER_DEV = milmove-db-dev
 DB_DOCKER_CONTAINER_PROD_MIGRATIONS = milmove-db-prod-migrations
