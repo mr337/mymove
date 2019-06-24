@@ -24,17 +24,17 @@ import { getAllTariff400ngItems, selectTariff400ngItems } from 'shared/Entities/
 import { getAllShipmentLineItems, selectSortedShipmentLineItems } from 'shared/Entities/modules/shipmentLineItems';
 import { getAllInvoices } from 'shared/Entities/modules/invoices';
 import { getTspForShipment } from 'shared/Entities/modules/transportationServiceProviders';
-import { selectStorageInTransits, getStorageInTransitsForShipment } from 'shared/Entities/modules/storageInTransits';
+import { getStorageInTransitsForShipment } from 'shared/Entities/modules/storageInTransits';
 import {
   updatePublicShipment,
   getPublicShipment,
-  selectShipment,
   getPublicShipmentLabel,
   acceptShipment,
   acceptPublicShipmentLabel,
   completePmSurvey,
   transportShipment,
   deliverShipment,
+  selectActualDeliveryDate,
 } from 'shared/Entities/modules/shipments';
 import {
   getServiceAgentsForShipment,
@@ -200,35 +200,35 @@ class ShipmentInfo extends Component {
     this.props.resetRequests();
   }
 
-  componentDidUpdate(prevProps) {
-    const { storageInTransits } = this.props;
-    if (storageInTransits !== prevProps.storageInTransits) {
-      this.resetActualDeliveryDate();
-    }
-  }
+  //componentDidUpdate(prevProps) {
+  //  const { storageInTransits } = this.props;
+  //  if (storageInTransits !== prevProps.storageInTransits) {
+  //    this.resetActualDeliveryDate();
+  //  }
+  //}
 
-  resetActualDeliveryDate = () => {
-    if (this.props.storageInTransits.length > 0) {
-      this.props.storageInTransits.map(storageInTransit => {
-        if (storageInTransit.location === 'DESTINATION' && storageInTransit.status === 'DELIVERED') {
-          return this.setState({
-            shipment: {
-              ...this.props.shipment,
-              actual_delivery_date: storageInTransit.out_date,
-            },
-          });
-        } else {
-          return null;
-        }
-      });
-    } else {
-      return this.setState({
-        shipment: {
-          ...this.props.shipment,
-        },
-      });
-    }
-  };
+  //resetActualDeliveryDate = () => {
+  //  if (this.props.storageInTransits.length > 0) {
+  //    this.props.storageInTransits.map(storageInTransit => {
+  //      if (storageInTransit.location === 'DESTINATION' && storageInTransit.status === 'DELIVERED') {
+  //        return this.setState({
+  //          shipment: {
+  //            ...this.props.shipment,
+  //            actual_delivery_date: storageInTransit.out_date,
+  //          },
+  //        });
+  //      } else {
+  //        return null;
+  //      }
+  //    });
+  //  } else {
+  //    return this.setState({
+  //      shipment: {
+  //        ...this.props.shipment,
+  //      },
+  //    });
+  //  }
+  //};
 
   acceptShipment = () => {
     return this.props.acceptShipment(this.props.shipment.id);
@@ -453,7 +453,7 @@ class ShipmentInfo extends Component {
               )}
               {this.props.loadTspDependenciesHasSuccess && (
                 <div className="office-tab">
-                  <Dates title="Dates" shipment={this.state.shipment} update={this.props.updatePublicShipment} />
+                  <Dates title="Dates" shipment={this.props.shipment} update={this.props.updatePublicShipment} />
                   <Weights
                     title="Weights & Items"
                     shipment={this.props.shipment}
@@ -510,17 +510,23 @@ class ShipmentInfo extends Component {
 
 const mapStateToProps = (state, props) => {
   const shipmentId = props.match.params.shipmentId;
-  const shipment = selectShipment(state, shipmentId);
+  //const storageInTransits = selectStorageInTransits(state, shipmentId);
+  const shipment = selectActualDeliveryDate(state, shipmentId);
   const shipmentDocuments = selectShipmentDocuments(state, shipment.id) || {};
   const gbl = shipmentDocuments.find(element => element.move_document_type === 'GOV_BILL_OF_LADING');
   const gblGenerated = !!gbl;
+  console.log('shipmentinfo', shipment);
+  //const actualDeliveryDate = selectActualDeliveryDate(state, shipmentId);
 
   return {
     swaggerError: state.swaggerPublic.hasErrored,
+    //storageInTransits,
     shipment,
     shipmentDocuments,
     gblGenerated,
-    storageInTransits: selectStorageInTransits(state, shipmentId),
+    //actualDeliveryDate: selectActualDeliveryDate(state, shipmentId),
+    //actualDeliveryDate,
+    //storageInTransits: selectStorageInTransits(state, shipmentId),
     tariff400ngItems: selectTariff400ngItems(state),
     shipmentLineItems: selectSortedShipmentLineItems(state),
     serviceAgents: selectServiceAgentsForShipment(state, shipmentId),
@@ -561,7 +567,6 @@ const mapDispatchToProps = dispatch =>
       getTspForShipment,
       resetRequests,
       getStorageInTransitsForShipment,
-      selectStorageInTransits,
     },
     dispatch,
   );

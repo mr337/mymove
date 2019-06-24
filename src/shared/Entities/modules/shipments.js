@@ -4,6 +4,7 @@ import { swaggerRequest } from 'shared/Swagger/request';
 import { getClient, getPublicClient } from 'shared/Swagger/api';
 import { isNull } from 'lodash';
 import { getEntitlements } from 'shared/entitlements.js';
+import { selectStorageInTransits } from './storageInTransits';
 
 const approveShipmentLabel = 'Shipments.approveShipment';
 export const getShipmentLabel = 'Shipments.getShipment';
@@ -120,4 +121,19 @@ export function selectShipmentStatus(state, id) {
 export function selectShipmentForMove(state, moveId) {
   const shipment = Object.values(state.entities.shipments).find(shipment => shipment.move_id === moveId);
   return shipment || {};
+}
+
+export function selectActualDeliveryDate(state, id) {
+  const storageInTransits = selectStorageInTransits(state, id);
+  const shipment = selectShipment(state, id);
+  if (storageInTransits.length > 0) {
+    storageInTransits.map(storageInTransit => {
+      if (storageInTransit.location === 'DESTINATION' && storageInTransit.status === 'DELIVERED') {
+        return (shipment['actual_delivery_date'] = storageInTransit.out_date);
+      } else {
+        return null;
+      }
+    });
+  }
+  return shipment;
 }

@@ -48,6 +48,10 @@ func patchStorageInTransitWithPayload(storageInTransit *models.StorageInTransit,
 
 	storageInTransit.ActualStartDate = (*time.Time)(payload.ActualStartDate)
 	storageInTransit.OutDate = (*time.Time)(payload.OutDate)
+
+	if storageInTransit.Location == models.StorageInTransitLocationDESTINATION && storageInTransit.Status == models.StorageInTransitStatusDELIVERED {
+	}
+
 }
 
 // PatchStorageInTransit edits an existing storage in transit and returns the updated object.
@@ -56,6 +60,9 @@ func (p *patchStorageInTransit) PatchStorageInTransit(payload apimessages.Storag
 
 	// Both TSPs and Office users can do this. TSPs can edit based on whether or not its their shipment.
 	isAuthorized, err := authorizeStorageInTransitHTTPRequest(p.db, session, shipmentID, true)
+	//shipment, err := models.FetchShipment(p.db, session, shipmentID)
+	//fmt.Println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+	//shipment.actualDeliveryDate = (*time.Time)(payload.OutDate)
 
 	if err != nil {
 		return nil, returnVerrs, err
