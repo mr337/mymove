@@ -3,16 +3,28 @@ package dutystations
 import (
 	"encoding/csv"
 	"fmt"
+	"net/http"
 	"os"
+	"reflect"
 	"strings"
+	"time"
 
 	"github.com/tealeg/xlsx"
+
+	"github.com/transcom/mymove/pkg/route"
 
 	"github.com/gobuffalo/pop"
 	"go.uber.org/zap"
 
 	"github.com/transcom/mymove/pkg/models"
 )
+
+const hereRequestTimeout = time.Duration(15) * time.Second
+
+type LatLong struct {
+	Latitude  float32
+	Longitude float32
+}
 
 var uppercaseWords = map[string]bool{
 	// seeing double w/ a comma == a hack to deal w/ commas in the office name
@@ -331,6 +343,32 @@ func (b *MigrationBuilder) convertAbbr(s string) string {
 	return s
 }
 
+func (b *MigrationBuilder) getAddressLatLonga() {
+	geocodeEndpoint := os.Getenv("HERE_MAPS_GEOCODE_ENDPOINT")
+	routingEndpoint := os.Getenv("HERE_MAPS_ROUTING_ENDPOINT")
+	testAppID := os.Getenv("HERE_MAPS_APP_ID")
+	testAppCode := os.Getenv("HERE_MAPS_APP_CODE")
+	hereClient := &http.Client{Timeout: hereRequestTimeout}
+	planner := route.NewHEREPlannerMine(b.logger, hereClient, geocodeEndpoint, routingEndpoint, testAppID, testAppCode)
+
+	fmt.Println(reflect.TypeOf(planner))
+	plannerType := reflect.TypeOf(planner)
+	for i := 0; i < plannerType.NumMethod(); i++ {
+		method := plannerType.Method(i)
+		fmt.Println(method.Name)
+	}
+	address := models.Address{
+		City:       "Asheville",
+		State:      "NC",
+		PostalCode: "28806",
+	}
+
+	latLong := planner.GetAddressLatLong(&address)
+
+	fmt.Printf("%v", latLong)
+	// b.logger.Debug("*** NONE FOUND... BLAH")
+}
+
 func (b *MigrationBuilder) Build(dutyStationsFilePath string, outputFilePath string) (string, error) {
 	// Parse raw data from xml
 	stations, err := b.ParseStations(dutyStationsFilePath)
@@ -342,7 +380,9 @@ func (b *MigrationBuilder) Build(dutyStationsFilePath string, outputFilePath str
 	defer f.Close()
 	w := csv.NewWriter(f)
 	w.Write([]string{"Duty Station Name", "ZIP", "Transportation Offices -->"})
-	for _, s := range stations {
+	b.getAddressLatLonga()
+
+	for _, s := range stations[:5] {
 		var row []string
 		fmt.Printf("%v\n", s)
 		dbOffices := b.FindTransportationOffice(s)

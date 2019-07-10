@@ -26,7 +26,7 @@ type herePlanner struct {
 	geocodeEndPointWithKeys string
 }
 
-type addressLatLong struct {
+type AddressLatLong struct {
 	err      error
 	address  *models.Address
 	location LatLong
@@ -78,11 +78,18 @@ func getPosition(r io.ReadCloser) (*HerePosition, error) {
 	return &response.Response.View[0].Result[0].Location.NavigationPosition[0], nil
 }
 
+func (p *herePlanner) GetAddressLatLong(address *models.Address) AddressLatLong {
+	responses := make(chan AddressLatLong)
+	go p.getAddressLatLong(responses, address)
+	response := <-responses
+	return response
+}
+
 // getAddressLatLong is expected to run in a goroutine to look up the LatLong of an address using the HERE
 // geocoder endpoint. It returns the data via a channel so two requests can run in parallel
-func (p *herePlanner) getAddressLatLong(responses chan addressLatLong, address *models.Address) {
+func (p *herePlanner) getAddressLatLong(responses chan AddressLatLong, address *models.Address) {
 
-	var latLongResponse addressLatLong
+	var latLongResponse AddressLatLong
 	latLongResponse.address = address
 
 	// Look up address
@@ -195,7 +202,7 @@ func (p *herePlanner) TransitDistance(source *models.Address, destination *model
 
 	// Convert addresses to LatLong using geocode API. Do via goroutines and channel so we can do two
 	// requests in parallel
-	responses := make(chan addressLatLong)
+	responses := make(chan AddressLatLong)
 	var srcLatLong LatLong
 	var destLatLong LatLong
 	go p.getAddressLatLong(responses, source)
@@ -221,6 +228,15 @@ func addKeysToEndpoint(endpoint string, id string, code string) string {
 // NewHEREPlanner constructs and returns a Planner which uses the HERE Map API to plan routes.
 func NewHEREPlanner(logger Logger, client httpGetter, geocodeEndpoint string, routeEndpoint string, appID string, appCode string) Planner {
 	return &herePlanner{
+		logger:                  logger,
+		httpClient:              client,
+		routeEndPointWithKeys:   addKeysToEndpoint(routeEndpoint, appID, appCode),
+		geocodeEndPointWithKeys: addKeysToEndpoint(geocodeEndpoint, appID, appCode)}
+}
+
+// nolint
+func NewHEREPlannerMine(logger Logger, client httpGetter, geocodeEndpoint string, routeEndpoint string, appID string, appCode string) herePlanner {
+	return herePlanner{
 		logger:                  logger,
 		httpClient:              client,
 		routeEndPointWithKeys:   addKeysToEndpoint(routeEndpoint, appID, appCode),
