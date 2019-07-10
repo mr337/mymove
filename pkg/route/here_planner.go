@@ -78,11 +78,11 @@ func getPosition(r io.ReadCloser) (*HerePosition, error) {
 	return &response.Response.View[0].Result[0].Location.NavigationPosition[0], nil
 }
 
-func (p *herePlanner) GetAddressLatLong(address *models.Address) AddressLatLong {
+func (p *herePlanner) GetAddressLatLong(address *models.Address) LatLong {
 	responses := make(chan AddressLatLong)
 	go p.getAddressLatLong(responses, address)
 	response := <-responses
-	return response
+	return response.location
 }
 
 // getAddressLatLong is expected to run in a goroutine to look up the LatLong of an address using the HERE

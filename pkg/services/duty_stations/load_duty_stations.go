@@ -21,11 +21,6 @@ import (
 
 const hereRequestTimeout = time.Duration(15) * time.Second
 
-type LatLong struct {
-	Latitude  float32
-	Longitude float32
-}
-
 var uppercaseWords = map[string]bool{
 	// seeing double w/ a comma == a hack to deal w/ commas in the office name
 	"AFB":     true,
@@ -343,7 +338,7 @@ func (b *MigrationBuilder) convertAbbr(s string) string {
 	return s
 }
 
-func (b *MigrationBuilder) getAddressLatLonga() {
+func (b *MigrationBuilder) addressLatLong(address models.Address) route.LatLong {
 	geocodeEndpoint := os.Getenv("HERE_MAPS_GEOCODE_ENDPOINT")
 	routingEndpoint := os.Getenv("HERE_MAPS_ROUTING_ENDPOINT")
 	testAppID := os.Getenv("HERE_MAPS_APP_ID")
@@ -357,16 +352,17 @@ func (b *MigrationBuilder) getAddressLatLonga() {
 		method := plannerType.Method(i)
 		fmt.Println(method.Name)
 	}
-	address := models.Address{
-		City:       "Asheville",
-		State:      "NC",
-		PostalCode: "28806",
-	}
 
 	latLong := planner.GetAddressLatLong(&address)
 
 	fmt.Printf("%v", latLong)
+	return latLong
 	// b.logger.Debug("*** NONE FOUND... BLAH")
+}
+
+func getCityState(unit string) (string, string) {
+	lst := strings.Split(unit, " ")
+	return strings.Join(lst[:len(lst)-1], " "), lst[len(lst)-1]
 }
 
 func (b *MigrationBuilder) Build(dutyStationsFilePath string, outputFilePath string) (string, error) {
@@ -380,9 +376,20 @@ func (b *MigrationBuilder) Build(dutyStationsFilePath string, outputFilePath str
 	defer f.Close()
 	w := csv.NewWriter(f)
 	w.Write([]string{"Duty Station Name", "ZIP", "Transportation Offices -->"})
-	b.getAddressLatLonga()
 
 	for _, s := range stations[:5] {
+		city, state := getCityState(s.Unit)
+		address := models.Address{
+			City:       city,
+			State:      state,
+			PostalCode: s.Zip,
+		}
+		latLong := b.addressLatLong(address)
+		to, err := models.FetchNearestTransportationOffice(b.db, latLong.Longitude, latLong.Latitude)
+		if err != nil {
+			fmt.Println(err)
+		}
+		fmt.Println(to, city, state)
 		var row []string
 		fmt.Printf("%v\n", s)
 		dbOffices := b.FindTransportationOffice(s)

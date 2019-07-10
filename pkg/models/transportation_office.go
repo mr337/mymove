@@ -70,3 +70,23 @@ func FetchTransportationOfficesByPostalCode(tx *pop.Connection, postalCode strin
 	}
 	return ts, nil
 }
+
+func FetchNearestTransportationOffice(tx *pop.Connection, long float32, lat float32) (TransportationOffice, error) {
+	var to TransportationOffice
+
+	query := `
+		select *
+			from transportation_offices
+		WHERE shipping_office_id IS NOT NULL
+		order by ST_Distance(
+  		ST_GeographyFromText(concat('point(',$1::text,' ',$2::text,')'))
+  		, ST_GeographyFromText(concat('point(',longitude, ' ', latitude,')'))
+ 		) asc`
+
+	err := tx.RawQuery(query, long, lat).First(&to)
+	if err != nil {
+		return to, errors.Wrap(err, "Fetch transportation office failed")
+	}
+
+	return to, nil
+}
