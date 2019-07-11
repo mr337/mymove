@@ -1,128 +1,78 @@
 package main
 
 import (
-	// "bufio"
 	"fmt"
 	"log"
 	"os"
 	"strings"
 
-	"github.com/spf13/pflag"
-	"github.com/spf13/viper"
+	"github.com/gobuffalo/pop"
+	"github.com/namsral/flag"
 	"go.uber.org/zap"
 
-	"github.com/transcom/mymove/pkg/cli"
-	"github.com/transcom/mymove/pkg/logging"
 	dutyStations "github.com/transcom/mymove/pkg/services/duty_stations"
 )
 
-func checkConfig(v *viper.Viper, logger logger) error {
+func setup() (*pop.Connection, *zap.Logger) {
+	config := flag.String("config-dir", "config", "The location of server config files")
+	verbose := flag.Bool("verbose", false, "Sets debug logging level")
+	env := flag.String("env", "development", "The environment to run in, which configures the database.")
+	validate := flag.Bool("validate", false, "Only run file validations")
+	flag.Parse()
 
-	logger.Debug("checking config")
+	zapConfig := zap.NewDevelopmentConfig()
+	logger, _ := zapConfig.Build()
 
-	err := cli.CheckEIA(v)
-	if err != nil {
-		return err
+	zapConfig.Level.SetLevel(zap.InfoLevel)
+	if *verbose {
+		zapConfig.Level.SetLevel(zap.DebugLevel)
 	}
 
-	err = cli.CheckDatabase(v, logger)
+	//DB connection
+	err := pop.AddLookupPaths(*config)
 	if err != nil {
-		return err
+		logger.Panic("Error initializing db connection", zap.Error(err))
+	}
+	db, err := pop.Connect(*env)
+	if err != nil {
+		logger.Panic("Error initializing db connection", zap.Error(err))
 	}
 
-	return nil
+	// If we just want to validate files we can exit
+	if validate != nil && *validate {
+		os.Exit(0)
+	}
+	return db, logger
 }
 
-func initFlags(flag *pflag.FlagSet) {
-
-	// DB Config
-	cli.InitDatabaseFlags(flag)
-
-	// EIA Open Data API
-	cli.InitEIAFlags(flag)
-
-	// Verbose
-	cli.InitVerboseFlags(flag)
-
-	// Don't sort flags
-	flag.SortFlags = false
-}
-
-// Command: go run github.com/transcom/mymove/cmd/load_transportation_offices
+// Command: go run github.com/transcom/mymove/cmd/load_duty_stations
 func main() {
 	inputFile := "./cmd/load_duty_stations/data/Unit_UnitCity_Zip_v5.xlsx"
-	// officesPath := "./testdata/transportation_offices.xml"
-	// inputFile := "To_Cntct_info_201906070930.xml"
-	outputFile := "/Users/isaac/Projects/dutystations.csv"
+	outputFile := "./cmd/load_duty_stations/data/outputfile.sql"
 
-	flag := pflag.CommandLine
-	initFlags(flag)
-	flag.Parse(os.Args[1:])
+	dbConnection, logger := setup()
 
-	v := viper.New()
-	v.BindPFlags(flag)
-	v.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
-	v.AutomaticEnv()
-
-	dbEnv := v.GetString(cli.DbEnvFlag)
-
-	logger, err := logging.Config(dbEnv, v.GetBool(cli.VerboseFlag))
-	if err != nil {
-		log.Fatalf("Failed to initialize Zap logging due to %v", err)
-	}
-	zap.ReplaceGlobals(logger)
-
-	err = checkConfig(v, logger)
-	if err != nil {
-		logger.Fatal("invalid configuration", zap.Error(err))
-	}
-
-	// Create a connection to the DB
-	dbConnection, err := cli.InitDatabase(v, logger)
-	if err != nil {
-		// No connection object means that the configuraton failed to validate and we should not startup
-		// A valid connection object that still has an error indicates that the DB is not up and we should not startup
-		logger.Fatal("Connecting to DB", zap.Error(err))
-	}
-
-	fmt.Println("hi...")
 	builder := dutyStations.NewMigrationBuilder(dbConnection, logger)
-	builder.Build(inputFile, outputFile)
+	insertions, err := builder.Build(inputFile)
+	if err != nil {
+		logger.Panic("Error while building migration", zap.Error(err))
+	}
 
-	// fileBytes := transportationoffices.ReadXMLFile(inputFile)
-	// o := transportationoffices.UnmarshalXML(fileBytes)
+	var migration strings.Builder
+	migration.WriteString("-- Migration generated using cmd/load_duty_stations\n")
+	migration.WriteString(fmt.Sprintf("-- Duty stations file: %v\n", outputFile))
+	migration.WriteString("\n")
+	migration.WriteString(insertions)
 
-	// offices := o.LISTGCNSLORGID.GCNSLORGID
+	f, err := os.Create(outputFile)
+	defer f.Close()
+	if err != nil {
+		log.Panic(err)
+	}
+	_, err = f.WriteString(migration.String())
+	if err != nil {
+		log.Panic(err)
+	}
 
-	// fmt.Printf("# total offices: %d\n", len(offices))
-
-	// usOfficesFilter := func(o transportationoffices.Office) bool {
-	// 	return o.LISTGCNSLINFO.GCNSLINFO.CNSLCOUNTRY == "US"
-	// }
-	// usOffices := transportationoffices.FilterOffice(offices, usOfficesFilter)
-	// fmt.Printf("# us only offices: %d\n", len(usOffices))
-
-	// conusOfficesFilter := func(o transportationoffices.Office) bool {
-	// 	return o.LISTGCNSLINFO.GCNSLINFO.CNSLSTATE != "AK" &&
-	// 		o.LISTGCNSLINFO.GCNSLINFO.CNSLSTATE != "HI"
-	// }
-	// conusOffices := transportationoffices.FilterOffice(usOffices, conusOfficesFilter)
-	// fmt.Printf("# conus only offices: %d\n", len(conusOffices))
-
-	// f, err := os.Create(outputFile)
-	// defer f.Close()
-	// w := bufio.NewWriter(f)
-
-	// counter := 0
-	// for _, o := range conusOffices {
-	// 	transportationoffices.WriteXMLLine(o, w)
-	// 	dbOffices := transportationoffices.FindConusOffices(dbConnection, o, w)
-	// 	dbPPSOs := transportationoffices.FindPPSOs(dbConnection, o)
-	// 	res := transportationoffices.WriteDbRecs("office", dbOffices, w)
-	// 	transportationoffices.WriteDbRecs("JPPSO", dbPPSOs, w)
-	// 	counter += res
-	// }
-	// w.Flush()
-	// fmt.Println(counter)
-
+	fmt.Printf("Complete! Migration written to %v\n", outputFile)
 }

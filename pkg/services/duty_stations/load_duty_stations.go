@@ -1,7 +1,6 @@
 package dutystations
 
 import (
-	"encoding/csv"
 	"fmt"
 	"net/http"
 	"os"
@@ -9,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gofrs/uuid"
 	"github.com/tealeg/xlsx"
 
 	"github.com/transcom/mymove/pkg/route"
@@ -259,6 +259,16 @@ func FilterTransportationOffices(os models.TransportationOffices, test func(mode
 	return filtered
 }
 
+func (b *MigrationBuilder) findDutyStations(s StationData) models.DutyStations {
+	zip := s.Zip
+	stations, err := models.FetchDutyStationsByPostalCode(b.db, zip)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	return stations
+}
+
 func (b *MigrationBuilder) FindTransportationOffice(s StationData) models.TransportationOffices {
 	zip := s.Zip
 
@@ -281,29 +291,16 @@ func (b *MigrationBuilder) FindTransportationOffice(s StationData) models.Transp
 
 func (b *MigrationBuilder) WriteLine(s StationData, row *[]string) {
 	name := b.normalizeName(s.Name)
-
 	//fmt.Printf("\nname: %s  | zip: %s \n", name, s.Zip)
 	//fmt.Fprintf(w, "\nname: %s  | zip: %s \n", name, s.Zip)
 	newRow := append(*row, name, s.Zip)
 	*row = newRow
 }
 
-func (b *MigrationBuilder) WriteDbRecs(ts models.TransportationOffices, row *[]string) int {
-	var newRow []string
-	if len(ts) == 0 {
-		// b.logger.Debug("*** NONE FOUND... BLAH")
-		//fmt.Printf("*** %s NOT FOUND\n", officeType)
-		//fmt.Fprintf(w, "*** %s NOT FOUND\n", officeType)
-		newRow = append(*row, "*** office NOT FOUND")
-		*row = newRow
-		return 1
-	}
+func (b *MigrationBuilder) WriteDbRecs(ts models.DutyStations) {
 	for _, t := range ts {
-		//fmt.Fprintf(w, "\t%s: %s\n", officeType, t.Name)
-		newRow = append(*row, t.Name)
-		*row = newRow
+		fmt.Println("\tdb: ", t.Name, " | ", t.Affiliation)
 	}
-	return 0
 }
 
 func (b *MigrationBuilder) normalizeName(name string) string {
@@ -344,20 +341,17 @@ func (b *MigrationBuilder) addressLatLong(address models.Address) route.LatLong 
 	testAppID := os.Getenv("HERE_MAPS_APP_ID")
 	testAppCode := os.Getenv("HERE_MAPS_APP_CODE")
 	hereClient := &http.Client{Timeout: hereRequestTimeout}
-	planner := route.NewHEREPlannerMine(b.logger, hereClient, geocodeEndpoint, routingEndpoint, testAppID, testAppCode)
+	p := route.NewHEREPlannerMine(b.logger, hereClient, geocodeEndpoint, routingEndpoint, testAppID, testAppCode)
 
-	fmt.Println(reflect.TypeOf(planner))
-	plannerType := reflect.TypeOf(planner)
+	plannerType := reflect.TypeOf(p)
 	for i := 0; i < plannerType.NumMethod(); i++ {
 		method := plannerType.Method(i)
 		fmt.Println(method.Name)
 	}
 
-	latLong := planner.GetAddressLatLong(&address)
+	latLong := p.GetAddressLatLong(&address)
 
-	fmt.Printf("%v", latLong)
 	return latLong
-	// b.logger.Debug("*** NONE FOUND... BLAH")
 }
 
 func getCityState(unit string) (string, string) {
@@ -365,40 +359,69 @@ func getCityState(unit string) (string, string) {
 	return strings.Join(lst[:len(lst)-1], " "), lst[len(lst)-1]
 }
 
-func (b *MigrationBuilder) Build(dutyStationsFilePath string, outputFilePath string) (string, error) {
-	// Parse raw data from xml
+func (b *MigrationBuilder) nearestTransportationOffice(address models.Address) models.TransportationOffice {
+	latLong := b.addressLatLong(address)
+	to, err := models.FetchNearestTransportationOffice(b.db, latLong.Longitude, latLong.Latitude)
+	if err != nil {
+		fmt.Println(err)
+	}
+	return to
+}
+
+func createInsertAddress(address models.Address, id uuid.UUID) string {
+	// nolint
+	return fmt.Sprintf(`INSERT INTO addresses (id, street_address_1, city, state, postal_code, created_at, updated_at, country) VALUES ('%s', 'N/A', '%s', '%s', '%s', now(), now(), 'US') ON CONFLICT DO NOTHING;`, id, address.City, address.State, address.PostalCode)
+}
+
+func createInsertDutyStations(addressID uuid.UUID, officeID uuid.UUID, stationName string) string {
+	dutyStationID := uuid.Must(uuid.NewV4())
+	// nolint
+	return fmt.Sprintf(`INSERT INTO duty_stations (id, name, affiliation, address_id, created_at, updated_at, transportation_office_id) VALUES ('%s', '%s', 'MARINES', '%s', now(), now(), '%s') ON CONFLICT DO NOTHING;`, dutyStationID, stationName, addressID, officeID)
+}
+
+func (b *MigrationBuilder) generateInsertionBlock(address models.Address, to models.TransportationOffice, station StationData) string {
+	var query strings.Builder
+	addressID := uuid.Must(uuid.NewV4())
+
+	fmt.Println(addressID)
+	query.WriteString(createInsertAddress(address, addressID))
+	query.WriteString("\n")
+	query.WriteString(createInsertDutyStations(addressID, to.ID, station.Name))
+	query.WriteString("\n")
+
+	return query.String()
+}
+
+func (b *MigrationBuilder) Build(dutyStationsFilePath string) (string, error) {
 	stations, err := b.ParseStations(dutyStationsFilePath)
 	if err != nil {
 		return "", err
 	}
 	fmt.Printf("# total stations: %d\n", len(stations))
-	f, err := os.Create(outputFilePath)
-	defer f.Close()
-	w := csv.NewWriter(f)
-	w.Write([]string{"Duty Station Name", "ZIP", "Transportation Offices -->"})
 
-	for _, s := range stations[:5] {
+	var migration strings.Builder
+	for _, s := range stations[:11] {
+		fmt.Println("\n", s.Name, " | ", s.Zip)
 		city, state := getCityState(s.Unit)
 		address := models.Address{
 			City:       city,
 			State:      state,
 			PostalCode: s.Zip,
 		}
-		latLong := b.addressLatLong(address)
-		to, err := models.FetchNearestTransportationOffice(b.db, latLong.Longitude, latLong.Latitude)
-		if err != nil {
-			fmt.Println(err)
+		fmt.Println(city, " | ", state)
+		if state == "HI" || state == "AK" {
+			fmt.Println("\t*** skipping non-conus")
+			continue
 		}
-		fmt.Println(to, city, state)
-		var row []string
-		fmt.Printf("%v\n", s)
-		dbOffices := b.FindTransportationOffice(s)
-		if len(dbOffices) > 0 {
-			b.WriteLine(s, &row)
-			b.WriteDbRecs(dbOffices, &row)
-			w.Write(row)
+
+		dbDutyStations := b.findDutyStations(s)
+		if len(dbDutyStations) == 0 {
+			fmt.Println("*** missing... add?? ***")
+			to := b.nearestTransportationOffice(address)
+			migration.WriteString(b.generateInsertionBlock(address, to, s))
+		} else {
+			b.WriteDbRecs(dbDutyStations)
 		}
 	}
-	w.Flush()
-	return "abc", nil
+	return migration.String(), nil
 }
