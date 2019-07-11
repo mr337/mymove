@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -284,6 +285,44 @@ func indexHandler(buildDir string, logger logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		http.ServeContent(w, r, "index.html", stat.ModTime(), bytes.NewReader(indexHTML))
 	}
+}
+
+// CreateNamedNoTLSServer returns a named server with no TLS configured
+func CreateNamedNoTLSServer(host string, port int, logger server.Logger, httpHandler http.Handler) (*server.NamedServer, error) {
+	return server.CreateNamedServer(&server.CreateNamedServerInput{
+		Name:        "no-tls",
+		Host:        host,
+		Port:        port,
+		Logger:      logger,
+		HTTPHandler: httpHandler,
+	})
+}
+
+// CreateNamedTLSServer returns a named server with TLS configured
+func CreateNamedTLSServer(host string, port int, logger server.Logger, httpHandler http.Handler, certificates []tls.Certificate) (*server.NamedServer, error) {
+	return server.CreateNamedServer(&server.CreateNamedServerInput{
+		Name:         "tls",
+		Host:         host,
+		Port:         port,
+		Logger:       logger,
+		HTTPHandler:  httpHandler,
+		ClientAuth:   tls.NoClientCert,
+		Certificates: certificates,
+	})
+}
+
+// CreateNamedMutualTLSServer returns a named server with mutual TLS configured
+func CreateNamedMutualTLSServer(host string, port int, logger server.Logger, httpHandler http.Handler, certificates []tls.Certificate, clientCAs *x509.CertPool) (*server.NamedServer, error) {
+	return server.CreateNamedServer(&server.CreateNamedServerInput{
+		Name:         "mutual-tls",
+		Host:         host,
+		Port:         port,
+		Logger:       logger,
+		HTTPHandler:  httpHandler,
+		ClientAuth:   tls.RequireAndVerifyClientCert,
+		Certificates: certificates,
+		ClientCAs:    clientCAs,
+	})
 }
 
 func serveFunction(cmd *cobra.Command, args []string) error {
@@ -823,13 +862,7 @@ func serveFunction(cmd *cobra.Command, args []string) error {
 	noTLSEnabled := v.GetBool(cli.NoTLSListenerFlag)
 	var noTLSServer *server.NamedServer
 	if noTLSEnabled {
-		noTLSServer, err = server.CreateNamedServer(&server.CreateNamedServerInput{
-			Name:        "no-tls",
-			Host:        listenInterface,
-			Port:        v.GetInt(cli.NoTLSPortFlag),
-			Logger:      logger,
-			HTTPHandler: httpHandler,
-		})
+		noTLSServer, err = CreateNamedNoTLSServer(listenInterface, v.GetInt(cli.NoTLSPortFlag), logger, httpHandler)
 		if err != nil {
 			logger.Fatal("error creating no-tls server", zap.Error(err))
 		}
@@ -839,15 +872,7 @@ func serveFunction(cmd *cobra.Command, args []string) error {
 	tlsEnabled := v.GetBool(cli.TLSListenerFlag)
 	var tlsServer *server.NamedServer
 	if tlsEnabled {
-		tlsServer, err = server.CreateNamedServer(&server.CreateNamedServerInput{
-			Name:         "tls",
-			Host:         listenInterface,
-			Port:         v.GetInt(cli.TLSPortFlag),
-			Logger:       logger,
-			HTTPHandler:  httpHandler,
-			ClientAuth:   tls.NoClientCert,
-			Certificates: certificates,
-		})
+		tlsServer, err = CreateNamedTLSServer(listenInterface, v.GetInt(cli.TLSPortFlag), logger, httpHandler, certificates)
 		if err != nil {
 			logger.Fatal("error creating tls server", zap.Error(err))
 		}
@@ -857,16 +882,7 @@ func serveFunction(cmd *cobra.Command, args []string) error {
 	mutualTLSEnabled := v.GetBool(cli.MutualTLSListenerFlag)
 	var mutualTLSServer *server.NamedServer
 	if mutualTLSEnabled {
-		mutualTLSServer, err = server.CreateNamedServer(&server.CreateNamedServerInput{
-			Name:         "mutual-tls",
-			Host:         listenInterface,
-			Port:         v.GetInt(cli.MutualTLSPortFlag),
-			Logger:       logger,
-			HTTPHandler:  httpHandler,
-			ClientAuth:   tls.RequireAndVerifyClientCert,
-			Certificates: certificates,
-			ClientCAs:    rootCAs,
-		})
+		mutualTLSServer, err = CreateNamedMutualTLSServer(listenInterface, v.GetInt(cli.MutualTLSPortFlag), logger, httpHandler, certificates, rootCAs)
 		if err != nil {
 			logger.Fatal("error creating mutual-tls server", zap.Error(err))
 		}
