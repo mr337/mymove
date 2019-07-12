@@ -47,7 +47,7 @@ func setup() (*pop.Connection, *zap.Logger) {
 
 // Command: go run github.com/transcom/mymove/cmd/load_duty_stations
 func main() {
-	inputFile := "./cmd/load_duty_stations/data/Unit_UnitCity_Zip_v5.xlsx"
+	inputFile := "./cmd/load_duty_stations/data/duty_station_units.csv"
 	outputFile := "./cmd/load_duty_stations/data/outputfile.sql"
 
 	dbConnection, logger := setup()
