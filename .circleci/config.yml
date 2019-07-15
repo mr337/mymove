@@ -490,7 +490,7 @@ jobs:
           docker_layer_caching: true
       - restore_cache:
           keys:
-            - go-mod-sources-v2-{{ checksum "go.sum" }}
+            - go-mod-sources-v3-{{ checksum "go.sum" }}
       - run:
           # This is needed to use `psql` to test DB connectivity, until the app
           # itself starts making database connections.
