@@ -483,7 +483,7 @@ jobs:
 
   # `server_test_coverage` runs code coverage and submits it to CodeClimate
   server_test_coverage:
-    executor: mymove_and_postgres_medium
+    executor: mymove_and_postgres_large
     steps:
       - checkout
       - setup_remote_docker:
