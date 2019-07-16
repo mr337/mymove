@@ -1,4 +1,5 @@
 import * as formatters from './formatters';
+import moment from 'moment';
 
 describe('formatters', () => {
   describe('formatWeight', () => {
@@ -52,5 +53,28 @@ describe('formatters', () => {
       const formattedDate = formatters.formatDateTimeWithTZ(new Date());
       expect(formattedDate).toMatch(/\d{2}-\w{3}-\d{2} \d{2}:\d{2} \w{2,3}/);
     });
+  });
+
+  describe('formatTimeAgo', () => {
+    it('should account for 1 minute correctly', () => {
+      let time = new Date();
+      let formattedTime = formatters.formatTimeAgo(time);
+
+      expect(formattedTime).toEqual('a few seconds ago');
+
+      time = moment().subtract(1, 'minute')._d;
+      formattedTime = formatters.formatTimeAgo(time);
+
+      expect(formattedTime).toEqual('1 min ago');
+    });
+  });
+});
+
+describe('formatToOrdinal', () => {
+  it('returns the ordinal corresponding to an int', () => {
+    expect(formatters.formatToOrdinal(1)).toEqual('1st');
+    expect(formatters.formatToOrdinal(2)).toEqual('2nd');
+    expect(formatters.formatToOrdinal(3)).toEqual('3rd');
+    expect(formatters.formatToOrdinal(4)).toEqual('4th');
   });
 });

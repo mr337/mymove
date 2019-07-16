@@ -1,13 +1,13 @@
 FROM alpine:3.7
 
-COPY bin_linux/soda /bin/soda
+COPY bin_linux/milmove /bin/milmove
 RUN mkdir -p /scripts
 COPY scripts/apply-secure-migration.sh /scripts
 COPY bin_linux/generate-test-data /bin/generate-test-data
 
 COPY migrations /migrate/migrations
+COPY migrations_manifest.txt /migrate/migrations_manifest.txt
 COPY local_migrations /migrate/local
-COPY config/database.yml /migrate
 RUN mkdir -p /bin/pkg/testdatagen/testdata/
 COPY pkg/testdatagen/testdata/test.pdf /bin/pkg/testdatagen/testdata/test.pdf
 
@@ -17,6 +17,6 @@ ENV SECURE_MIGRATION_DIR=/migrate/local
 
 # Install tools needed in container
 RUN apk update
-RUN apk add postgresql-client bash
+RUN apk add postgresql-client bash --no-cache
 
 WORKDIR /scripts

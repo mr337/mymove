@@ -1,6 +1,6 @@
 package cli
 
 func (suite *cliTestSuite) TestConfigRoute() {
-	suite.Setup(InitRouteFlags)
-	suite.Nil(CheckRoute(suite.viper))
+	suite.Setup(InitRouteFlags, []string{})
+	suite.NoError(CheckRoute(suite.viper))
 }

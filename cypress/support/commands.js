@@ -13,6 +13,7 @@ import {
   userTypeToBaseURL,
   longPageLoadTimeout,
 } from './constants';
+import moment from 'moment';
 
 /* global Cypress, cy */
 // ***********************************************
@@ -201,48 +202,42 @@ Cypress.Commands.add(
     // GET landing page to get csrf cookies
     cy.request('/');
 
+    // Wait for cookies to be present to make sure the page is fully loaded
+    // Otherwise we delete cookies before they exist
+    cy.getCookie('_gorilla_csrf').should('exist');
     // Clear out cookies if we don't want to send in request
     if (!sendGorillaCSRF) {
-      cy.clearCookie('_gorilla_csrf');
       // Don't include cookie in request header
-      cy.getCookie('_gorilla_csrf').should('not.exist');
-    } else {
-      // Include cookie in request header
-      cy.getCookie('_gorilla_csrf').should('exist');
+      cy.clearCookie('_gorilla_csrf');
     }
 
     if (!sendMaskedGorillaCSRF) {
       // Clear out the masked CSRF token
       cy.clearCookie('masked_gorilla_csrf');
       // Send request without masked token
-      cy
-        .getCookie('masked_gorilla_csrf')
-        .should('not.exist')
-        .then(() => {
-          // null token will omit the 'X-CSRF-HEADER' from request
-          sendRequest(userType);
-        });
+      sendRequest(userType);
     } else {
       // Send request with masked token
-      cy
-        .getCookie('masked_gorilla_csrf')
-        .should('exist')
-        .then(cookie => {
-          sendRequest(userType, cookie.value);
-        });
+      cy.getCookie('masked_gorilla_csrf').then(cookie => {
+        sendRequest(userType, cookie.value);
+      });
     }
   },
 );
 
 Cypress.Commands.add('logout', () => {
-  cy.clearCookies();
   cy.patientVisit('/');
+
   cy.getCookie('masked_gorilla_csrf').then(cookie => {
-    cy.request({
-      url: '/auth/logout',
-      method: 'POST',
-      headers: { 'x-csrf-token': cookie.value },
-    });
+    cy
+      .request({
+        url: '/auth/logout',
+        method: 'POST',
+        headers: { 'x-csrf-token': cookie.value },
+      })
+      .then(resp => {
+        expect(resp.status).to.equal(200);
+      });
 
     // In case of login redirect we once more go to the homepage
     cy.patientVisit('/');
@@ -380,5 +375,14 @@ Cypress.Commands.add('removeFetch', () => {
   // https://github.com/cypress-io/cypress-example-recipes/tree/master/examples/stubbing-spying__window-fetch
   cy.on('window:before:load', win => {
     delete win.fetch;
+  });
+});
+
+// calls /internal/calendar/available_move_dates for a given start date
+// and returns an array of moment.js dates
+Cypress.Commands.add('nextAvailable', (startDate = moment().format('YYYY-MM-DD')) => {
+  return cy.request(`/internal/calendar/available_move_dates?startDate=${startDate}`).then(response => {
+    expect(response.body).to.have.property('available');
+    return response.body.available.map(date => moment(date));
   });
 });

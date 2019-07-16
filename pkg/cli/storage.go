@@ -2,20 +2,12 @@ package cli
 
 import (
 	"fmt"
-	"path"
 	"path/filepath"
 
 	"github.com/aws/aws-sdk-go/service/s3"
-
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/endpoints"
-	awssession "github.com/aws/aws-sdk-go/aws/session"
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
-	"go.uber.org/zap"
-
-	"github.com/transcom/mymove/pkg/storage"
 )
 
 const (
@@ -53,13 +45,8 @@ func CheckStorage(v *viper.Viper) error {
 
 	if storageBackend == "s3" {
 		r := v.GetString(AWSS3RegionFlag)
-		if len(r) == 0 {
-			return errors.Wrap(&errInvalidRegion{Region: r}, fmt.Sprintf("%s is invalid", "aws-s3-region"))
-		}
-
-		regions := endpoints.AwsPartition().Services()[s3.ServiceName].Regions()
-		if _, ok := regions[r]; !ok {
-			return errors.Wrap(&errInvalidRegion{Region: r}, fmt.Sprintf("%s is invalid", "aws-s3-region"))
+		if err := CheckAWSRegionForService(r, s3.ServiceName); err != nil {
+			return errors.Wrap(err, fmt.Sprintf("%s is invalid", AWSS3RegionFlag))
 		}
 	} else if storageBackend == "local" {
 		localStorageRoot := v.GetString(LocalStorageRootFlag)
@@ -69,48 +56,4 @@ func CheckStorage(v *viper.Viper) error {
 	}
 
 	return nil
-}
-
-// InitStorage initializes the storage backend
-func InitStorage(v *viper.Viper, logger Logger) storage.FileStorer {
-	storageBackend := v.GetString(StorageBackendFlag)
-	localStorageRoot := v.GetString(LocalStorageRootFlag)
-	localStorageWebRoot := v.GetString(LocalStorageWebRootFlag)
-
-	var storer storage.FileStorer
-	if storageBackend == "s3" {
-		awsS3Bucket := v.GetString(AWSS3BucketNameFlag)
-		awsS3Region := v.GetString(AWSS3RegionFlag)
-		awsS3KeyNamespace := v.GetString(AWSS3KeyNamespaceFlag)
-		logger.Info("Using s3 storage backend",
-			zap.String("bucket", awsS3Bucket),
-			zap.String("region", awsS3Region),
-			zap.String("key", awsS3KeyNamespace))
-		if len(awsS3Bucket) == 0 {
-			logger.Fatal("must provide aws-s3-bucket-name parameter, exiting")
-		}
-		if len(awsS3Region) == 0 {
-			logger.Fatal("Must provide aws-s3-region parameter, exiting")
-		}
-		if len(awsS3KeyNamespace) == 0 {
-			logger.Fatal("Must provide aws_s3_key_namespace parameter, exiting")
-		}
-		aws := awssession.Must(awssession.NewSession(&aws.Config{
-			Region: aws.String(awsS3Region),
-		}))
-		storer = storage.NewS3(awsS3Bucket, awsS3KeyNamespace, logger, aws)
-	} else if storageBackend == "memory" {
-		logger.Info("Using memory storage backend",
-			zap.String(LocalStorageRootFlag, path.Join(localStorageRoot, localStorageWebRoot)),
-			zap.String(LocalStorageWebRootFlag, localStorageWebRoot))
-		fsParams := storage.NewMemoryParams(localStorageRoot, localStorageWebRoot, logger)
-		storer = storage.NewMemory(fsParams)
-	} else {
-		logger.Info("Using local storage backend",
-			zap.String(LocalStorageRootFlag, path.Join(localStorageRoot, localStorageWebRoot)),
-			zap.String(LocalStorageWebRootFlag, localStorageWebRoot))
-		fsParams := storage.NewFilesystemParams(localStorageRoot, localStorageWebRoot, logger)
-		storer = storage.NewFilesystem(fsParams)
-	}
-	return storer
 }

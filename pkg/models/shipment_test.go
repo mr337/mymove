@@ -6,6 +6,7 @@ import (
 
 	"github.com/gofrs/uuid"
 
+	"github.com/transcom/mymove/pkg/auth"
 	"github.com/transcom/mymove/pkg/dates"
 	. "github.com/transcom/mymove/pkg/models"
 	"github.com/transcom/mymove/pkg/testdatagen"
@@ -40,22 +41,22 @@ func (suite *ModelSuite) Test_ShipmentValidations() {
 
 	stringDate := weekendDate.Format("2006-01-02 15:04:05 -0700 UTC")
 	expErrors := map[string][]string{
-		"move_id":                         []string{"move_id can not be blank."},
-		"status":                          []string{"status can not be blank."},
-		"estimated_pack_days":             []string{"-2 is less than or equal to zero."},
-		"estimated_transit_days":          []string{"0 is less than or equal to zero."},
-		"weight_estimate":                 []string{"-3 is less than zero."},
-		"progear_weight_estimate":         []string{"-12 is less than zero."},
-		"spouse_progear_weight_estimate":  []string{"-9 is less than zero."},
-		"requested_pickup_date":           []string{fmt.Sprintf("cannot be on a weekend or holiday, is %v", stringDate)},
-		"original_delivery_date":          []string{fmt.Sprintf("cannot be on a weekend or holiday, is %v", stringDate)},
-		"original_pack_date":              []string{fmt.Sprintf("cannot be on a weekend or holiday, is %v", stringDate)},
-		"pm_survey_planned_pack_date":     []string{fmt.Sprintf("cannot be on a weekend or holiday, is %v", stringDate)},
-		"pm_survey_planned_pickup_date":   []string{fmt.Sprintf("cannot be on a weekend or holiday, is %v", stringDate)},
-		"pm_survey_planned_delivery_date": []string{fmt.Sprintf("cannot be on a weekend or holiday, is %v", stringDate)},
-		"actual_pack_date":                []string{fmt.Sprintf("cannot be on a weekend or holiday, is %v", stringDate)},
-		"actual_pickup_date":              []string{fmt.Sprintf("cannot be on a weekend or holiday, is %v", stringDate)},
-		"actual_delivery_date":            []string{fmt.Sprintf("cannot be on a weekend or holiday, is %v", stringDate)},
+		"move_id":                         {"move_id can not be blank."},
+		"status":                          {"status can not be blank."},
+		"estimated_pack_days":             {"-2 is less than or equal to zero."},
+		"estimated_transit_days":          {"0 is less than or equal to zero."},
+		"weight_estimate":                 {"-3 is less than zero."},
+		"progear_weight_estimate":         {"-12 is less than zero."},
+		"spouse_progear_weight_estimate":  {"-9 is less than zero."},
+		"requested_pickup_date":           {fmt.Sprintf("cannot be on a weekend or holiday, is %v", stringDate)},
+		"original_delivery_date":          {fmt.Sprintf("cannot be on a weekend or holiday, is %v", stringDate)},
+		"original_pack_date":              {fmt.Sprintf("cannot be on a weekend or holiday, is %v", stringDate)},
+		"pm_survey_planned_pack_date":     {fmt.Sprintf("cannot be on a weekend or holiday, is %v", stringDate)},
+		"pm_survey_planned_pickup_date":   {fmt.Sprintf("cannot be on a weekend or holiday, is %v", stringDate)},
+		"pm_survey_planned_delivery_date": {fmt.Sprintf("cannot be on a weekend or holiday, is %v", stringDate)},
+		"actual_pack_date":                {fmt.Sprintf("cannot be on a weekend or holiday, is %v", stringDate)},
+		"actual_pickup_date":              {fmt.Sprintf("cannot be on a weekend or holiday, is %v", stringDate)},
+		"actual_delivery_date":            {fmt.Sprintf("cannot be on a weekend or holiday, is %v", stringDate)},
 	}
 
 	suite.verifyValidationErrors(shipment, expErrors)
@@ -67,7 +68,7 @@ func (suite *ModelSuite) Test_ShipmentValidationsSubmittedMove() {
 	}
 
 	verrs, err := shipment.Validate(suite.DB())
-	suite.Nil(err)
+	suite.NoError(err)
 
 	pickupAddressErrors := verrs.Get("pickup_address_id")
 	suite.Equal(1, len(pickupAddressErrors), "expected one error on pickup_address_id, but there were %d: %v", len(pickupAddressErrors), pickupAddressErrors)
@@ -129,48 +130,59 @@ func (suite *ModelSuite) TestShipmentStateMachine() {
 
 	// Can submit shipment
 	err := shipment.Submit(time.Now())
-	suite.Nil(err)
+	suite.NoError(err)
 	suite.Equal(ShipmentStatusSUBMITTED, shipment.Status, "expected Submitted")
 
 	// Can award shipment
 	err = shipment.Award()
-	suite.Nil(err)
+	suite.NoError(err)
 	suite.Equal(ShipmentStatusAWARDED, shipment.Status, "expected Awarded")
 
 	// Can accept shipment
 	err = shipment.Accept()
-	suite.Nil(err)
+	suite.NoError(err)
 	suite.Equal(ShipmentStatusACCEPTED, shipment.Status, "expected Accepted")
 
 	// Can approve shipment (HHG)
-	err = shipment.Approve()
-	suite.Nil(err)
+	err = shipment.Approve(time.Now())
+	suite.NoError(err)
 	suite.Equal(ShipmentStatusAPPROVED, shipment.Status, "expected Approved")
 
 	shipDate := time.Now()
 
 	// Can pack shipment
 	err = shipment.Pack(shipDate)
-	suite.Nil(err)
+	suite.NoError(err)
 	suite.Equal(ShipmentStatusAPPROVED, shipment.Status, "expected Approved")
 	suite.Equal(*shipment.ActualPackDate, shipDate, "expected Actual Pack Date to be set")
 
 	// Can transport shipment
 	err = shipment.Transport(shipDate)
-	suite.Nil(err)
+	suite.NoError(err)
 	suite.Equal(ShipmentStatusINTRANSIT, shipment.Status, "expected In Transit")
 	suite.Equal(*shipment.ActualPickupDate, shipDate, "expected Actual Pickup Date to be set")
 
-	// Can deliver shipment
+	//Can deliver shipment
+	authorizedStartDate := shipment.ActualPickupDate
+	actualStartDate := authorizedStartDate.Add(testdatagen.OneDay)
+	sit := testdatagen.MakeStorageInTransit(suite.DB(), testdatagen.Assertions{
+		StorageInTransit: StorageInTransit{
+			ShipmentID:          shipment.ID,
+			EstimatedStartDate:  *authorizedStartDate,
+			AuthorizedStartDate: authorizedStartDate,
+			ActualStartDate:     &actualStartDate,
+			Status:              StorageInTransitStatusINSIT,
+		},
+	})
+
+	shipment.StorageInTransits = StorageInTransits{sit}
+
 	err = shipment.Deliver(shipDate)
-	suite.Nil(err)
+	suite.NoError(err)
 	suite.Equal(ShipmentStatusDELIVERED, shipment.Status, "expected Delivered")
 	suite.Equal(*shipment.ActualDeliveryDate, shipDate, "expected Actual Delivery Date to be set")
-
-	// Can complete shipment
-	err = shipment.Complete()
-	suite.Nil(err)
-	suite.Equal(ShipmentStatusCOMPLETED, shipment.Status, "expected Completed")
+	suite.Equal(StorageInTransitStatusDELIVERED, shipment.StorageInTransits[0].Status)
+	suite.Equal(shipment.ActualDeliveryDate, shipment.StorageInTransits[0].OutDate)
 }
 
 func (suite *ModelSuite) TestSetBookDateWhenSubmitted() {
@@ -183,7 +195,7 @@ func (suite *ModelSuite) TestSetBookDateWhenSubmitted() {
 
 	// Can submit shipment
 	err := shipment.Submit(time.Now())
-	suite.Nil(err)
+	suite.NoError(err)
 	suite.NotNil(shipment.BookDate)
 }
 
@@ -284,7 +296,7 @@ func (suite *ModelSuite) TestCurrentTransportationServiceProviderID() {
 	// Since it doesn't re-fetch the shipment, if the offers have changed
 	// We need to re-fetch the shipment to reload the offers
 	reloadShipment, err := FetchShipmentByTSP(suite.DB(), tsp.ID, shipment.ID)
-	suite.Nil(err)
+	suite.NoError(err)
 	suite.Equal(tsp.ID, reloadShipment.CurrentTransportationServiceProviderID(), "expected ids to be equal")
 }
 
@@ -850,7 +862,7 @@ func (suite *ModelSuite) TestAcceptedShipmentOffer() {
 
 	// Shipment does not have an accepted shipment offer
 	noAcceptedShipmentOffer, err := shipment.AcceptedShipmentOffer()
-	suite.Nil(err) // Shipment.Status does not require an accepted ShipmentOffer
+	suite.NoError(err) // Shipment.Status does not require an accepted ShipmentOffer
 	suite.Nil(noAcceptedShipmentOffer)
 
 	shipmentOffer := testdatagen.MakeDefaultShipmentOffer(suite.DB())
@@ -859,23 +871,23 @@ func (suite *ModelSuite) TestAcceptedShipmentOffer() {
 
 	// Can submit shipment
 	err = shipment.Submit(time.Now())
-	suite.Nil(err)
+	suite.NoError(err)
 	suite.Equal(ShipmentStatusSUBMITTED, shipment.Status, "expected Submitted")
 
 	// Can award shipment
 	err = shipment.Award()
-	suite.Nil(err)
+	suite.NoError(err)
 	suite.Equal(ShipmentStatusAWARDED, shipment.Status, "expected Awarded")
 
 	// ShipmentOffer has not been accepted yet
 	// Shipment does not have an accepted shipment offer
 	noAcceptedShipmentOffer, err = shipment.AcceptedShipmentOffer()
-	suite.Nil(err) // Shipment.Status does not require an accepted ShipmentOffer
+	suite.NoError(err) // Shipment.Status does not require an accepted ShipmentOffer
 	suite.Nil(noAcceptedShipmentOffer)
 
 	// Can accept shipment
 	err = shipment.Accept()
-	suite.Nil(err)
+	suite.NoError(err)
 	suite.Equal(ShipmentStatusACCEPTED, shipment.Status, "expected Accepted")
 
 	// ShipmentOffer has not been accepted yet
@@ -886,22 +898,22 @@ func (suite *ModelSuite) TestAcceptedShipmentOffer() {
 
 	// Accept ShipmentOffer for the TSP
 	err = shipment.ShipmentOffers[0].Accept()
-	suite.Nil(err)
+	suite.NoError(err)
 	suite.True(*shipment.ShipmentOffers[0].Accepted)
 	suite.Nil(shipment.ShipmentOffers[0].RejectionReason)
 
 	// Get accepted shipment offer from shipment
 	acceptedShipmentOffer, err := shipment.AcceptedShipmentOffer()
-	suite.Nil(err)
+	suite.NoError(err)
 	suite.NotNil(acceptedShipmentOffer)
 
 	// Test results of TSP for an accepted shipment offer
 	// accepted shipment offer can't have empty or nil values for certain data
 	scac, err := acceptedShipmentOffer.SCAC()
-	suite.Nil(err)
+	suite.NoError(err)
 	suite.NotEmpty(scac)
 	supplierID, err := acceptedShipmentOffer.SupplierID()
-	suite.Nil(err)
+	suite.NoError(err)
 	suite.NotNil(supplierID)
 	suite.NotEmpty(*supplierID)
 
@@ -909,4 +921,22 @@ func (suite *ModelSuite) TestAcceptedShipmentOffer() {
 	suite.NotEmpty(acceptedShipmentOffer.TransportationServiceProviderPerformance.TransportationServiceProvider.ID.String())
 	suite.Equal(acceptedShipmentOffer.TransportationServiceProviderPerformance.TransportationServiceProvider.ID,
 		shipment.ShipmentOffers[0].TransportationServiceProviderPerformance.TransportationServiceProvider.ID)
+}
+
+// We're asserting that if for any reason
+// a shipment gets into the remove "COMPLETED" state
+// it does not fail being queried
+func (suite *ModelSuite) TestFetchShipment() {
+	shipment := testdatagen.MakeShipment(
+		suite.DB(),
+		testdatagen.Assertions{Shipment: Shipment{Status: "COMPLETED"}},
+	)
+	session := &auth.Session{
+		ApplicationName: auth.OfficeApp,
+	}
+
+	actualShipment, err := FetchShipment(suite.DB(), session, shipment.ID)
+
+	suite.NoError(err, "Did not fail fetching completed shipment")
+	suite.Equal("COMPLETED", string(actualShipment.Status))
 }

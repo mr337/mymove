@@ -8,6 +8,8 @@ import (
 	"github.com/gobuffalo/validate/validators"
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
+
+	"github.com/transcom/mymove/pkg/auth"
 )
 
 // StorageInTransitStatus represents the status of a SIT request
@@ -106,14 +108,13 @@ func (s *StorageInTransit) Validate(tx *pop.Connection) (*validate.Errors, error
 func FetchStorageInTransitsOnShipment(tx *pop.Connection, shipmentID uuid.UUID) (StorageInTransits, error) {
 	storageInTransits := StorageInTransits{}
 
-	err := tx.Eager("WarehouseAddress").Where("shipment_id = $1", shipmentID).All(&storageInTransits)
+	err := tx.Eager("WarehouseAddress").Where("shipment_id = $1", shipmentID).Order("location desc").Order("estimated_start_date").All(&storageInTransits)
 
 	if err != nil {
 		return nil, err
 	}
 
 	return storageInTransits, nil
-
 }
 
 // FetchStorageInTransitByID retrieves a single Storage In Transit object and their warehouse address based on its own ID
@@ -133,27 +134,26 @@ func FetchStorageInTransitByID(tx *pop.Connection, storageInTransitID uuid.UUID)
 }
 
 // DeleteStorageInTransit deletes a Storage In Transit object based on the provided ID
-func DeleteStorageInTransit(tx *pop.Connection, storageInTransitID uuid.UUID) (err error) {
+func DeleteStorageInTransit(tx *pop.Connection, storageInTransitID uuid.UUID) (*StorageInTransit, error) {
 	var storageInTransit StorageInTransit
 
 	// Identify the record we're going to delete by its ID
 	// If we can't find it we return an ErrFetchNotFound.
-	err = tx.Find(&storageInTransit, storageInTransitID)
+	err := tx.Find(&storageInTransit, storageInTransitID)
 	if err != nil {
 		if err.Error() == "sql: no rows in result set" {
-			return ErrFetchNotFound
+			return nil, ErrFetchNotFound
 		}
-		return err
+		return nil, err
 	}
 
 	// Execute the deletion
 	err = tx.Destroy(&storageInTransit)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	return nil
-
+	return &storageInTransit, nil
 }
 
 // SaveStorageInTransitAndAddress saves a StorageInTransit and its Address atomically.
@@ -177,6 +177,44 @@ func SaveStorageInTransitAndAddress(db *pop.Connection, storageInTransit *Storag
 			return transactionError
 		}
 
+		return nil
+	})
+
+	return responseVErrors, responseError
+}
+
+// Deliver changes a sit status to Delivered status and sets the OutDate
+func (s *StorageInTransit) Deliver(deliveryDate time.Time) error {
+	// A SIT must be IN SIT and a DESTINATION SIT in order to be delivered
+	if !(s.Status == StorageInTransitStatusINSIT &&
+		s.Location == StorageInTransitLocationDESTINATION) {
+		return ErrWriteConflict
+	}
+
+	s.Status = StorageInTransitStatusDELIVERED
+	s.OutDate = &deliveryDate
+
+	return nil
+}
+
+func (s *StorageInTransit) SaveActualDeliveryDateAsOutDate(db *pop.Connection, session *auth.Session, newOutDate time.Time) (*validate.Errors, error) {
+	responseVErrors := validate.NewErrors()
+	var responseError error
+
+	shipment, err := FetchShipment(db, session, s.ShipmentID)
+	if err != nil {
+		return responseVErrors, responseError
+	}
+
+	db.Transaction(func(db *pop.Connection) error {
+		transactionError := errors.New("rollback")
+
+		shipment.ActualDeliveryDate = &newOutDate
+		if verrs, err := db.ValidateAndSave(shipment); verrs.HasAny() || err != nil {
+			responseVErrors.Append(verrs)
+			responseError = errors.Wrap(err, "Error saving shipment")
+			return transactionError
+		}
 		return nil
 	})
 

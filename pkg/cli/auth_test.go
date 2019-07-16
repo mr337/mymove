@@ -1,6 +1,6 @@
 package cli
 
 func (suite *cliTestSuite) TestConfigAuth() {
-	suite.Setup(InitAuthFlags)
-	suite.Nil(CheckAuth(suite.viper))
+	suite.Setup(InitAuthFlags, []string{})
+	suite.NoError(CheckAuth(suite.viper))
 }

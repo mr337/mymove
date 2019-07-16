@@ -11,30 +11,30 @@ export default class QueueList extends Component {
 
     return (
       <div>
-        <h2>Queues</h2>
+        <h2 className="queue-list-heading">Queues</h2>
         <ul className="usa-sidenav-list">
           <li>
             <NavLink to="/queues/new" activeClassName="usa-current">
-              <span>New Moves</span>
+              <span>New Moves/Shipments</span>
             </NavLink>
           </li>
           <li>
             <NavLink to="/queues/ppm" activeClassName="usa-current" data-cy="ppm-queue">
-              <span>PPMs</span>
+              <span>PPM Shipments</span>
             </NavLink>
           </li>
           <li>
             <NavLink
               to="#hhgshipments"
               activeClassName="usa-current"
-              isActive={isActive('hhg_accepted', 'hhg_delivered', 'hhg_completed')}
+              isActive={isActive('hhg_active', 'hhg_delivered')}
             >
               <span>HHG shipments:</span>
             </NavLink>
             <ul className="usa-sidenav-sub_list">
               <li>
-                <NavLink to="/queues/hhg_accepted" activeClassName="usa-current">
-                  <span>Accepted</span>
+                <NavLink to="/queues/hhg_active" activeClassName="usa-current">
+                  <span>Active</span>
                 </NavLink>
               </li>
               <li>
@@ -42,14 +42,8 @@ export default class QueueList extends Component {
                   <span>Delivered</span>
                 </NavLink>
               </li>
-              <li>
-                <NavLink to="/queues/hhg_completed" activeClassName="usa-current">
-                  <span>Completed</span>
-                </NavLink>
-              </li>
             </ul>
           </li>
-
           <li>
             <NavLink to="/queues/all" activeClassName="usa-current">
               <span>All Moves</span>

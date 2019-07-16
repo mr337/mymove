@@ -45,6 +45,9 @@ func patchStorageInTransitWithPayload(storageInTransit *models.StorageInTransit,
 
 	storageInTransit.WarehousePhone = handlers.FmtStringPtrNonEmpty(payload.WarehousePhone)
 	storageInTransit.WarehouseEmail = handlers.FmtStringPtrNonEmpty(payload.WarehouseEmail)
+
+	storageInTransit.ActualStartDate = (*time.Time)(payload.ActualStartDate)
+	storageInTransit.OutDate = (*time.Time)(payload.OutDate)
 }
 
 // PatchStorageInTransit edits an existing storage in transit and returns the updated object.
@@ -69,14 +72,21 @@ func (p *patchStorageInTransit) PatchStorageInTransit(payload apimessages.Storag
 	}
 
 	patchStorageInTransitWithPayload(storageInTransit, &payload)
-
 	verrs, err := models.SaveStorageInTransitAndAddress(p.db, storageInTransit)
 	if err != nil || verrs.HasAny() {
 		returnVerrs.Append(verrs)
 		return nil, returnVerrs, err
 	}
 
-	return storageInTransit, returnVerrs, nil
+	if session.IsTspUser() {
+		verrs, err = storageInTransit.SaveActualDeliveryDateAsOutDate(p.db, session, *(*time.Time)(payload.OutDate))
+		if err != nil || verrs.HasAny() {
+			returnVerrs.Append(verrs)
+			return storageInTransit, returnVerrs, err
+		}
+	}
+
+	return storageInTransit, returnVerrs, err
 }
 
 // NewStorageInTransitPatcher is the public constructor for a `NewStorageInTransitPatcher`

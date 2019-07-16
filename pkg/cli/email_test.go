@@ -1,6 +1,6 @@
 package cli
 
 func (suite *cliTestSuite) TestConfigEmail() {
-	suite.Setup(InitEmailFlags)
-	suite.Nil(CheckEmail(suite.viper))
+	suite.Setup(InitEmailFlags, []string{})
+	suite.NoError(CheckEmail(suite.viper))
 }

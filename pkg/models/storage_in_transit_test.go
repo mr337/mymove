@@ -8,6 +8,7 @@ import (
 	"github.com/go-openapi/swag"
 	"github.com/gofrs/uuid"
 
+	"github.com/transcom/mymove/pkg/auth"
 	"github.com/transcom/mymove/pkg/models"
 	"github.com/transcom/mymove/pkg/testdatagen"
 )
@@ -45,7 +46,7 @@ func (suite *ModelSuite) TestStorageInTransitValidations() {
 			WarehouseID:         "000383",
 			WarehouseName:       "Hercules Hauling",
 			WarehouseAddressID:  uuid,
-			WarehousePhone:      swag.String("(713) 868-3497"),
+			WarehousePhone:      swag.String("713-868-3497"),
 			WarehouseEmail:      swag.String("joe@herculeshauling.com"),
 			Status:              "APPROVED",
 			AuthorizedStartDate: nil,
@@ -67,7 +68,7 @@ func (suite *ModelSuite) TestStorageInTransitValidations() {
 			WarehouseID:         "000383",
 			WarehouseName:       "Hercules Hauling",
 			WarehouseAddressID:  uuid,
-			WarehousePhone:      swag.String("(713) 868-3497"),
+			WarehousePhone:      swag.String("713-868-3497"),
 			WarehouseEmail:      swag.String("joe@herculeshauling.com"),
 			Status:              "APPROVED",
 			AuthorizedStartDate: &authorizedStartDate,
@@ -96,7 +97,7 @@ func (suite *ModelSuite) TestFetchStorageInTransitsByShipment() {
 
 	storageInTransits, err := models.FetchStorageInTransitsOnShipment(suite.DB(), shipment.ID)
 
-	suite.Nil(err)
+	suite.NoError(err)
 	suite.Equal(10, len(storageInTransits))
 
 }
@@ -116,7 +117,7 @@ func (suite *ModelSuite) TestFetchStorageInTransistByID() {
 
 	fetchedSIT, err := models.FetchStorageInTransitByID(suite.DB(), createdSIT.ID)
 
-	suite.Nil(err)
+	suite.NoError(err)
 	suite.NotEmpty(fetchedSIT)
 	suite.Equal(createdSIT.ID, fetchedSIT.ID)
 	suite.Equal(*createdSIT.WarehouseEmail, *createdSIT.WarehouseEmail)
@@ -142,12 +143,13 @@ func (suite *ModelSuite) TestDestroyStorageInTransit() {
 	createdSIT := testdatagen.MakeStorageInTransit(suite.DB(), assertions)
 
 	// Let's send a zero value as the ID to ensure that fails with a ErrFetchNotFound
-	err := models.DeleteStorageInTransit(suite.DB(), uuid.UUID{})
+	_, err := models.DeleteStorageInTransit(suite.DB(), uuid.UUID{})
 	suite.Equal(models.ErrFetchNotFound, err)
 
 	// Make sure we can delete successfully
-	err = models.DeleteStorageInTransit(suite.DB(), createdSIT.ID)
+	storageInTransit, err := models.DeleteStorageInTransit(suite.DB(), createdSIT.ID)
 	suite.Equal(nil, err)
+	suite.Equal(createdSIT.ID, storageInTransit.ID)
 
 	// We should get ErrFetchNotFound now that the record is deleted
 	_, err = models.FetchStorageInTransitByID(suite.DB(), createdSIT.ID)
@@ -179,7 +181,7 @@ func (suite *ModelSuite) TestSaveStorageInTransitAndAddress() {
 	}
 
 	verrs, err := models.SaveStorageInTransitAndAddress(suite.DB(), &storageInTransit)
-	suite.Nil(err)
+	suite.NoError(err)
 	suite.Equal(0, verrs.Count())
 
 	savedStorageInTransit, err := models.FetchStorageInTransitByID(suite.DB(), storageInTransit.ID)
@@ -190,4 +192,75 @@ func (suite *ModelSuite) TestSaveStorageInTransitAndAddress() {
 	suite.Equal(storageInTransit.WarehouseName, savedStorageInTransit.WarehouseName)
 	suite.Equal(*storageInTransit.WarehousePhone, *savedStorageInTransit.WarehousePhone)
 	suite.Equal(*storageInTransit.WarehouseEmail, *savedStorageInTransit.WarehouseEmail)
+}
+
+func (suite *ModelSuite) TestDeliverStorageInTransit() {
+	shipment := testdatagen.MakeShipment(suite.DB(), testdatagen.Assertions{})
+
+	startDate := testdatagen.DateInsidePerformancePeriod
+
+	storageInTransit := testdatagen.MakeStorageInTransit(suite.DB(), testdatagen.Assertions{
+		StorageInTransit: models.StorageInTransit{
+			ShipmentID:          shipment.ID,
+			EstimatedStartDate:  startDate,
+			AuthorizedStartDate: &startDate,
+			ActualStartDate:     &startDate,
+			Status:              models.StorageInTransitStatusINSIT,
+		},
+	})
+	deliveryDate := startDate.Add(testdatagen.OneWeek)
+
+	err := storageInTransit.Deliver(deliveryDate)
+
+	suite.NoError(err)
+	suite.Equal(models.StorageInTransitStatusDELIVERED, storageInTransit.Status)
+	suite.Equal(&deliveryDate, storageInTransit.OutDate)
+
+	// Test an undeliverable SIT throws error
+	storageInTransit = testdatagen.MakeStorageInTransit(suite.DB(), testdatagen.Assertions{
+		StorageInTransit: models.StorageInTransit{
+			Location:            models.StorageInTransitLocationORIGIN,
+			ShipmentID:          shipment.ID,
+			EstimatedStartDate:  startDate,
+			AuthorizedStartDate: &startDate,
+			ActualStartDate:     &startDate,
+			Status:              models.StorageInTransitStatusINSIT,
+		},
+	})
+	err = storageInTransit.Deliver(deliveryDate)
+	suite.Error(err)
+}
+
+func (suite *ModelSuite) TestSaveActualDeliveryDateAsOutDate() {
+	startDate := testdatagen.DateInsidePerformancePeriod
+	deliveryDate := startDate.Add(testdatagen.OneWeek)
+	shipment := testdatagen.MakeShipment(suite.DB(), testdatagen.Assertions{
+		Shipment: models.Shipment{
+			ActualDeliveryDate: &deliveryDate,
+		},
+	})
+
+	session := &auth.Session{
+		ApplicationName: auth.TspApp,
+	}
+
+	storageInTransit := testdatagen.MakeStorageInTransit(suite.DB(), testdatagen.Assertions{
+		StorageInTransit: models.StorageInTransit{
+			Shipment:   shipment,
+			ShipmentID: shipment.ID,
+			Status:     models.StorageInTransitStatusDELIVERED,
+			OutDate:    &startDate,
+		},
+	})
+
+	suite.NotEqual(shipment.ActualDeliveryDate, storageInTransit.OutDate)
+
+	verrs, err := storageInTransit.SaveActualDeliveryDateAsOutDate(suite.DB(), session, *storageInTransit.OutDate)
+	suite.Nil(err)
+	suite.Equal(0, verrs.Count())
+
+	actualShipment, err := models.FetchShipment(suite.DB(), session, shipment.ID)
+	savedStorageInTransit, err := models.FetchStorageInTransitByID(suite.DB(), storageInTransit.ID)
+
+	suite.Equal(actualShipment.ActualDeliveryDate, savedStorageInTransit.OutDate)
 }

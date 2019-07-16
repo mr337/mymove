@@ -22,15 +22,12 @@ type cliTestSuite struct {
 
 type initFlags func(f *pflag.FlagSet)
 
-// A function to use when there is nothing that needs initializing in our tests
-func initNull(flag *pflag.FlagSet) {}
-
-func (suite *cliTestSuite) Setup(fn initFlags) {
+func (suite *cliTestSuite) Setup(fn initFlags, flagSet []string) {
 	suite.viper = nil
 
 	flag := pflag.NewFlagSet(os.Args[0], pflag.ExitOnError)
 	fn(flag)
-	flag.Parse([]string{})
+	flag.Parse(flagSet)
 
 	v := viper.New()
 	err := v.BindPFlags(flag)

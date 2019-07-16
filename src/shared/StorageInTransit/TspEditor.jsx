@@ -8,6 +8,11 @@ import { isValid, isSubmitting, submit, hasSubmitSucceeded } from 'redux-form';
 import { connect } from 'react-redux';
 import { bindActionCreators } from 'redux';
 import StorageInTransitForm, { formName as StorageInTransitFormName } from './StorageInTransitForm.jsx';
+import StorageInTransitTspEditForm, {
+  formName as StorageInTransitTspEditFormName,
+} from './StorageInTransitTspEditForm.jsx';
+import { getPublicShipment } from 'shared/Entities/modules/shipments';
+import { updateStorageInTransit } from 'shared/Entities/modules/storageInTransits';
 
 export class TspEditor extends Component {
   state = {
@@ -31,30 +36,45 @@ export class TspEditor extends Component {
   };
 
   onSubmit = values => {
-    this.props.updateStorageInTransit(values);
+    const { storageInTransit } = this.props;
+    this.props.updateStorageInTransit(storageInTransit.shipment_id, storageInTransit.id, values).then(() => {
+      this.props.getPublicShipment(storageInTransit.shipment_id);
+    });
   };
 
   render() {
+    const isRequested = this.props.storageInTransit.status === 'REQUESTED';
+
     return (
       <div className="storage-in-transit-panel-modal">
-        <div className="title">Edit SIT Request</div>
-        <StorageInTransitForm onSubmit={this.onSubmit} initialValues={this.props.storageInTransit} />
-        <div className="usa-grid-full">
-          <div className="usa-width-one-half">
-            <p className="cancel-link">
-              <a className="usa-button-secondary" onClick={this.closeForm}>
-                Cancel
-              </a>
-            </p>
-          </div>
-          <div className="usa-width-one-half align-right">
-            <button
-              className="button usa-button-primary"
-              disabled={!this.props.formEnabled}
-              onClick={this.saveAndClose}
-            >
-              Save
-            </button>
+        <div className="editable-panel is-editable">
+          <div className="title">Edit SIT Request</div>
+          {isRequested ? (
+            <StorageInTransitForm onSubmit={this.onSubmit} initialValues={this.props.storageInTransit} />
+          ) : (
+            <StorageInTransitTspEditForm
+              minDate={this.props.storageInTransit.authorized_start_date}
+              onSubmit={this.onSubmit}
+              initialValues={this.props.storageInTransit}
+            />
+          )}
+          <div className="usa-grid-full">
+            <div className="usa-width-one-half">
+              <p className="cancel-link">
+                <a className="usa-button-secondary" onClick={this.closeForm}>
+                  Cancel
+                </a>
+              </p>
+            </div>
+            <div className="usa-width-one-half align-right">
+              <button
+                className="button usa-button-primary"
+                disabled={!this.props.formEnabled}
+                onClick={this.saveAndClose}
+              >
+                Save
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -69,18 +89,29 @@ TspEditor.propTypes = {
   submitForm: PropTypes.func.isRequired,
 };
 
-function mapStateToProps(state) {
+function formNameSelector(props) {
+  const storageInTransit = props.storageInTransit;
+  let formName = '';
+  storageInTransit.status === 'REQUESTED'
+    ? (formName = StorageInTransitFormName)
+    : (formName = StorageInTransitTspEditFormName);
+  return formName;
+}
+
+function mapStateToProps(state, props) {
   return {
-    formEnabled: isValid(StorageInTransitFormName)(state) && !isSubmitting(StorageInTransitFormName)(state),
-    hasSubmitSucceeded: hasSubmitSucceeded(StorageInTransitFormName)(state),
+    formEnabled: isValid(formNameSelector(props))(state) && !isSubmitting(formNameSelector(props))(state),
+    hasSubmitSucceeded: hasSubmitSucceeded(formNameSelector(props))(state),
   };
 }
 
-function mapDispatchToProps(dispatch) {
+function mapDispatchToProps(dispatch, ownProps) {
   // Bind an action, which submit the form by its name
   return bindActionCreators(
     {
-      submitForm: () => submit(StorageInTransitFormName),
+      submitForm: () => submit(formNameSelector(ownProps)),
+      updateStorageInTransit,
+      getPublicShipment,
     },
     dispatch,
   );

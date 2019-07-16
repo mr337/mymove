@@ -88,7 +88,7 @@ func CreateShipmentOfferData(db *pop.Connection, numTspUsers int, numShipments i
 
 	// Create TSP Users
 	for i := 1; i <= numTspUsers; i++ {
-		email := fmt.Sprintf("leo_spaceman_tsp_%d@example.com", i)
+		email := fmt.Sprintf("leo_spaceman_tsp_%d%d@example.com", i, time.Now().UnixNano())
 		tspUserAssertions := Assertions{
 			User: models.User{
 				LoginGovEmail: email,
@@ -169,8 +169,7 @@ func CreateShipmentOfferData(db *pop.Connection, numTspUsers int, numShipments i
 		ordTypeDetHHGPermit := internalmessages.OrdersTypeDetailHHGPERMITTED
 		if shipmentStatus == models.ShipmentStatusAPPROVED ||
 			shipmentStatus == models.ShipmentStatusINTRANSIT ||
-			shipmentStatus == models.ShipmentStatusDELIVERED ||
-			shipmentStatus == models.ShipmentStatusCOMPLETED {
+			shipmentStatus == models.ShipmentStatusDELIVERED {
 			moveStatus = models.MoveStatusAPPROVED
 			orderStatus = models.OrderStatusAPPROVED
 		}
@@ -321,7 +320,11 @@ func CreateShipmentOfferData(db *pop.Connection, numTspUsers int, numShipments i
 	}
 
 	if tariffDataShipment != nil {
-		createTariffDataForRateEngine(db, *tariffDataShipment)
+		linehaulRates := models.Tariff400ngLinehaulRates{}
+		db.All(&linehaulRates)
+		if len(linehaulRates) == 0 {
+			createTariffDataForRateEngine(db, *tariffDataShipment)
+		}
 	}
 
 	return tspUserList, shipmentList, shipmentOfferList, nil

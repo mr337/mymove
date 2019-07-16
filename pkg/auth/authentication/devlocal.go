@@ -10,6 +10,7 @@ import (
 
 	"github.com/gobuffalo/pop"
 	"github.com/gofrs/uuid"
+	"github.com/gorilla/csrf"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -26,6 +27,8 @@ const (
 	TspUserType string = "tsp"
 	// DpsUserType is the type of user for a DPS user
 	DpsUserType string = "dps"
+	// AdminUserType is the type of user for an admin user
+	AdminUserType string = "admin"
 )
 
 // UserListHandler handles redirection
@@ -51,7 +54,8 @@ func (h UserListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, h.landingURL(session), http.StatusTemporaryRedirect)
 		return
 	}
-	identities, err := models.FetchAllUserIdentities(h.db)
+	limit := 25
+	identities, err := models.FetchAppUserIdentities(h.db, session.ApplicationName, limit)
 	if err != nil {
 		h.logger.Error("Could not load list of users", zap.Error(err))
 		http.Error(w,
@@ -59,36 +63,36 @@ func (h UserListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.StatusInternalServerError)
 		return
 	}
-	// Truncate the list if larger than 25
-	if len(identities) > 25 {
-		identities = identities[:25]
-	}
-
-	// Grab the CSRF token from cookies set by the middleware
-	csrfCookie, err := auth.GetCookie(auth.MaskedGorillaCSRFToken, r)
-	if err != nil {
-		h.logger.Error("CSRF Cookie was not set via middleware")
-		http.Error(w, http.StatusText(500), http.StatusInternalServerError)
-		return
-	}
-	csrfToken := csrfCookie.Value
 
 	type TemplateData struct {
 		Identities      []models.UserIdentity
+		IsMilApp        bool
 		MilMoveUserType string
+		IsOfficeApp     bool
 		OfficeUserType  string
+		IsTspApp        bool
 		TspUserType     string
 		DpsUserType     string
+		IsAdminApp      bool
+		AdminUserType   string
 		CsrfToken       string
+		QueryLimit      int
 	}
 
 	templateData := TemplateData{
 		Identities:      identities,
+		IsMilApp:        auth.MilApp == session.ApplicationName,
 		MilMoveUserType: MilMoveUserType,
+		IsOfficeApp:     auth.OfficeApp == session.ApplicationName,
 		OfficeUserType:  OfficeUserType,
+		IsTspApp:        auth.TspApp == session.ApplicationName,
 		TspUserType:     TspUserType,
 		DpsUserType:     DpsUserType,
-		CsrfToken:       csrfToken,
+		IsAdminApp:      auth.AdminApp == session.ApplicationName,
+		AdminUserType:   AdminUserType,
+		// Build CSRF token instead of grabbing from middleware. Otherwise throws errors when accessed directly.
+		CsrfToken:  csrf.Token(r),
+		QueryLimit: limit,
 	}
 
 	t := template.Must(template.New("users").Parse(`
@@ -101,13 +105,26 @@ func (h UserListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		  <div class="row mb-3">
 			<div class="col-md-8">
 			  <h2 class="mt-4">Select an Existing User</h1>
-			  <p>Showing the first 25 users:</p>
+			  <h4>Login with user email:</h4>
+				<form method="post" action="/devlocal-auth/login">
+					<p>
+						<input type="hidden" name="gorilla.csrf.Token" value="{{$.CsrfToken}}">
+						<input type="hidden" name="userType" value="{{if $.IsTspApp}}{{$.TspUserType}}{{else if $.IsOfficeApp}}{{$.OfficeUserType}}{{else}}{{$.MilMoveUserType}}{{end}}">
+						<label for="email">User Email</label>
+						<input type="text" name="email" size="60">
+						<button type="submit" data-hook="existing-user-login">Login</button>
+					</p>
+				</form>
+			  <h4>Showing the first {{$.QueryLimit}} users by creation date:</h4>
 			  {{range .Identities}}
 				<form method="post" action="/devlocal-auth/login">
 					<p id="{{.ID}}">
 						<input type="hidden" name="gorilla.csrf.Token" value="{{$.CsrfToken}}">
 						{{.Email}}
-						{{if .DpsUserID}}
+						{{if .IsSuperuser}}
+						  ({{$.AdminUserType}})
+						  <input type="hidden" name="userType" value="{{$.AdminUserType}}">
+						{{else if .DpsUserID}}
 						  ({{$.DpsUserType}})
 						  <input type="hidden" name="userType" value="{{$.DpsUserType}}">
 						{{else if .TspUserID}}
@@ -131,7 +148,7 @@ func (h UserListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 			<div class="col-md-4">
 			  <h2 class="mt-4">Create a New User</h1>
-			  <p>Creating new users for different sites will mean you need to redirect and log in yourself.</p>
+			  {{ if $.IsMilApp }}
 			  <form method="post" action="/devlocal-auth/new">
 				<p>
 				  <input type="hidden" name="gorilla.csrf.Token" value="{{.CsrfToken}}">
@@ -142,10 +159,27 @@ func (h UserListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			  <form method="post" action="/devlocal-auth/new">
 				<p>
 				  <input type="hidden" name="gorilla.csrf.Token" value="{{.CsrfToken}}">
+				  <input type="hidden" name="userType" value="{{.DpsUserType}}">
+				  <button type="submit" data-hook="new-user-login-{{.DpsUserType}}">Create a New {{.DpsUserType}} User</button>
+				</p>
+			  </form>
+			  {{else if $.IsAdminApp }}
+			  <form method="post" action="/devlocal-auth/new">
+				<p>
+				  <input type="hidden" name="gorilla.csrf.Token" value="{{.CsrfToken}}">
+				  <input type="hidden" name="userType" value="{{.AdminUserType}}">
+				  <button type="submit" data-hook="new-user-login-{{.AdminUserType}}">Create a New {{.AdminUserType}} User</button>
+				</p>
+			  </form>
+			  {{else if $.IsOfficeApp }}
+			  <form method="post" action="/devlocal-auth/new">
+				<p>
+				  <input type="hidden" name="gorilla.csrf.Token" value="{{.CsrfToken}}">
 				  <input type="hidden" name="userType" value="{{.OfficeUserType}}">
 				  <button type="submit" data-hook="new-user-login-{{.OfficeUserType}}">Create a New {{.OfficeUserType}} User</button>
 				</p>
 			  </form>
+			  {{else if $.IsTspApp }}
 			  <form method="post" action="/devlocal-auth/new">
 				<p>
 				  <input type="hidden" name="gorilla.csrf.Token" value="{{.CsrfToken}}">
@@ -153,13 +187,7 @@ func (h UserListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				  <button type="submit" data-hook="new-user-login-{{.TspUserType}}">Create a New {{.TspUserType}} User</button>
 				</p>
 			  </form>
-			  <form method="post" action="/devlocal-auth/new">
-				<p>
-				  <input type="hidden" name="gorilla.csrf.Token" value="{{.CsrfToken}}">
-				  <input type="hidden" name="userType" value="{{.DpsUserType}}">
-				  <button type="submit" data-hook="new-user-login-{{.DpsUserType}}">Create a New {{.DpsUserType}} User</button>
-				</p>
-			  </form>
+			  {{end}}
 			</div>
 		  </div>
 		</div> <!-- container -->
@@ -198,22 +226,36 @@ func NewAssignUserHandler(ac Context, db *pop.Connection, appnames auth.Applicat
 	return handler
 }
 
-// AssignUserHandler logs in a user locally
+// AssignUserHandler logs in a user locally using a user id or email
 func (h AssignUserHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	userID := r.PostFormValue("id")
-	if userID == "" {
-		h.logger.Error("No user id specified")
+	email := r.PostFormValue("email")
+	if userID == "" && email == "" {
+		h.logger.Error("No user id or email specified")
 		http.Redirect(w, r, "/devlocal-auth/login", http.StatusTemporaryRedirect)
 		return
 	}
 
-	h.logger.Info("New Devlocal Login", zap.String("userID", userID))
+	h.logger.Info("New Devlocal Login",
+		zap.String("userID", userID),
+		zap.String("email", email))
 
-	userUUID := uuid.Must(uuid.FromString(userID))
-	user, err := models.GetUser(h.db, userUUID)
-	if err != nil {
-		h.logger.Error("Could not load user", zap.String("userID", userID), zap.Error(err))
-		http.Error(w, http.StatusText(500), http.StatusInternalServerError)
+	var user *models.User
+	if userID != "" {
+		userUUID := uuid.Must(uuid.FromString(userID))
+		var err error
+		user, err = models.GetUser(h.db, userUUID)
+		if err != nil {
+			h.logger.Error("Could not load user from user id", zap.String("userID", userID), zap.Error(err))
+			http.Error(w, http.StatusText(500), http.StatusInternalServerError)
+		}
+	} else if email != "" {
+		var err error
+		user, err = models.GetUserFromEmail(h.db, email)
+		if err != nil {
+			h.logger.Error("Could not load user from email", zap.String("email", email), zap.Error(err))
+			http.Error(w, http.StatusText(500), http.StatusInternalServerError)
+		}
 	}
 
 	userType := r.PostFormValue("userType")
@@ -323,6 +365,8 @@ func createUser(h devlocalAuthHandler, w http.ResponseWriter, r *http.Request) (
 	user := models.User{
 		LoginGovUUID:  id,
 		LoginGovEmail: email,
+		IsSuperuser:   false,
+		Disabled:      false,
 	}
 
 	userType := r.PostFormValue("userType")
@@ -378,6 +422,7 @@ func createUser(h devlocalAuthHandler, w http.ResponseWriter, r *http.Request) (
 			Telephone:              telephone,
 			TransportationOfficeID: office.ID,
 			Email:                  email,
+			Disabled:               false,
 		}
 		if user.ID != uuid.Nil {
 			officeUser.UserID = &user.ID
@@ -413,6 +458,7 @@ func createUser(h devlocalAuthHandler, w http.ResponseWriter, r *http.Request) (
 			Telephone:                       telephone,
 			TransportationServiceProviderID: tsp.ID,
 			Email:                           email,
+			Disabled:                        false,
 		}
 		if user.ID != uuid.Nil {
 			tspUser.UserID = &user.ID
@@ -428,6 +474,7 @@ func createUser(h devlocalAuthHandler, w http.ResponseWriter, r *http.Request) (
 	case DpsUserType:
 		dpsUser := models.DpsUser{
 			LoginGovEmail: email,
+			Disabled:      false,
 		}
 
 		verrs, err := h.db.ValidateAndSave(&dpsUser)
@@ -436,6 +483,15 @@ func createUser(h devlocalAuthHandler, w http.ResponseWriter, r *http.Request) (
 		}
 		if verrs.HasAny() {
 			h.logger.Error("validation errors creating dps user", zap.Stringer("errors", verrs))
+		}
+	case AdminUserType:
+		user.IsSuperuser = true
+		verrs, err := h.db.ValidateAndSave(&user)
+		if err != nil {
+			h.logger.Error("could not create admin user", zap.Error(err))
+		}
+		if verrs.HasAny() {
+			h.logger.Error("validation errors creating admin user", zap.Stringer("errors", verrs))
 		}
 	}
 
@@ -461,21 +517,37 @@ func createSession(h devlocalAuthHandler, user *models.User, userType string, w 
 	session.IDToken = "devlocal"
 	session.UserID = userIdentity.ID
 	session.Email = userIdentity.Email
-	session.Disabled = userIdentity.Disabled
+	session.IsSuperuser = userIdentity.IsSuperuser
 
 	// Set the app
+	disabled := userIdentity.Disabled
 
 	// Keep the logic for redirection separate from setting the session user ids
 	switch userType {
 	case OfficeUserType:
 		session.ApplicationName = auth.OfficeApp
 		session.Hostname = h.appnames.OfficeServername
+		disabled = userIdentity.Disabled || (userIdentity.OfficeDisabled != nil && *userIdentity.OfficeDisabled)
 	case TspUserType:
 		session.ApplicationName = auth.TspApp
 		session.Hostname = h.appnames.TspServername
+		disabled = userIdentity.Disabled || (userIdentity.TspDisabled != nil && *userIdentity.TspDisabled)
+	case AdminUserType:
+		session.ApplicationName = auth.AdminApp
+		session.Hostname = h.appnames.AdminServername
 	default:
 		session.ApplicationName = auth.MilApp
 		session.Hostname = h.appnames.MilServername
+	}
+
+	// If the user is disabled they should be denied a session
+	if disabled {
+		h.logger.Error("Disabled user requesting authentication",
+			zap.String("application_name", string(session.ApplicationName)),
+			zap.String("hostname", session.Hostname),
+			zap.String("user_id", session.UserID.String()),
+			zap.String("email", session.Email))
+		return nil, errors.New("Disabled user requesting authentication")
 	}
 
 	if userIdentity.ServiceMemberID != nil {
@@ -490,7 +562,7 @@ func createSession(h devlocalAuthHandler, user *models.User, userType string, w 
 		session.TspUserID = *(userIdentity.TspUserID)
 	}
 
-	if userIdentity.DpsUserID != nil {
+	if userIdentity.DpsUserID != nil && (userIdentity.DpsDisabled != nil && !*userIdentity.DpsDisabled) {
 		session.DpsUserID = *(userIdentity.DpsUserID)
 	}
 
@@ -521,6 +593,10 @@ func verifySessionWithApp(session *auth.Session) error {
 		return errors.Errorf("Non-TSP user %s authenticated at TSP site", session.Email)
 	}
 
+	if !session.IsSuperuser && session.IsAdminApp() {
+		return errors.Errorf("Non-superuser %s authenticated at admin site", session.Email)
+	}
+
 	return nil
 }
 
@@ -529,14 +605,8 @@ func loginUser(h devlocalAuthHandler, user *models.User, userType string, w http
 	session, err := createSession(devlocalAuthHandler(h), user, userType, w, r)
 	if err != nil {
 		h.logger.Error("Could not create session", zap.Error(err))
-		http.Error(w, http.StatusText(500), http.StatusInternalServerError)
-		return nil, err
-	}
-
-	if session.Disabled {
-		h.logger.Info("Disabled user requesting authentication", zap.Error(err), zap.String("email", session.Email))
 		http.Error(w, http.StatusText(403), http.StatusForbidden)
-		return nil, nil
+		return nil, err
 	}
 
 	err = verifySessionWithApp(session)

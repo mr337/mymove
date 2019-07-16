@@ -8,13 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/99designs/aws-vault/prompt"
-	"github.com/99designs/aws-vault/vault"
-	"github.com/99designs/keyring"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/arn"
-	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/aws/aws-sdk-go/aws/endpoints"
 	awssession "github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/cloudwatchevents"
 	"github.com/aws/aws-sdk-go/service/ecr"
@@ -39,14 +34,6 @@ type errInvalidAccountID struct {
 
 func (e *errInvalidAccountID) Error() string {
 	return fmt.Sprintf("invalid AWS account ID %q", e.AwsAccountID)
-}
-
-type errInvalidRegion struct {
-	Region string
-}
-
-func (e *errInvalidRegion) Error() string {
-	return fmt.Sprintf("invalid AWS region %q", e.Region)
 }
 
 type errInvalidService struct {
@@ -90,28 +77,29 @@ func (e *errInvalidCommand) Error() string {
 }
 
 const (
-	awsAccountIDFlag         string = "aws-account-id"
-	awsRegionFlag            string = "aws-region"
-	awsProfileFlag           string = "aws-profile"
-	awsVaultKeychainNameFlag string = "aws-vault-keychain-name"
-	chamberBinaryFlag        string = "chamber-binary"
-	chamberRetriesFlag       string = "chamber-retries"
-	chamberKMSKeyAliasFlag   string = "chamber-kms-key-alias"
-	chamberUsePathsFlag      string = "chamber-use-paths"
-	serviceFlag              string = "service"
-	environmentFlag          string = "environment"
-	repositoryNameFlag       string = "repository-name"
-	imageTagFlag             string = "image-tag"
-	commandFlag              string = "command"
+	awsAccountIDFlag       string = "aws-account-id"
+	chamberBinaryFlag      string = "chamber-binary"
+	chamberRetriesFlag     string = "chamber-retries"
+	chamberKMSKeyAliasFlag string = "chamber-kms-key-alias"
+	chamberUsePathsFlag    string = "chamber-use-paths"
+	serviceFlag            string = "service"
+	environmentFlag        string = "environment"
+	repositoryNameFlag     string = "repository-name"
+	imageTagFlag           string = "image-tag"
+	commandFlag            string = "command"
+	commandArgsFlag        string = "command-args"
 )
 
 func initFlags(flag *pflag.FlagSet) {
 
-	// AWS Vault Settings
+	// AWS Account
 	flag.String(awsAccountIDFlag, "", "The AWS Account ID")
-	flag.String(awsRegionFlag, "us-west-2", "The AWS Region")
-	flag.String(awsProfileFlag, "", "The aws-vault profile")
-	flag.String(awsVaultKeychainNameFlag, "", "The aws-vault keychain name")
+
+	// AWS Flags
+	cli.InitAWSFlags(flag)
+
+	// Vault Flags
+	cli.InitVaultFlags(flag)
 
 	// Chamber Settings
 	flag.String(chamberBinaryFlag, "/bin/chamber", "Chamber Binary")
@@ -125,10 +113,7 @@ func initFlags(flag *pflag.FlagSet) {
 	flag.String(repositoryNameFlag, "", fmt.Sprintf("The name of the repository where the tagged image resides"))
 	flag.String(imageTagFlag, "", "The name of the image tag referenced in the task definition")
 	flag.String(commandFlag, "", fmt.Sprintf("The name of the command to run inside the docker container (choose %q)", commands))
-
-	// EIA Open Data API
-	// The EIA Key is set in the Local or CircleCI environment and not in Chamber.
-	cli.InitEIAFlags(flag)
+	flag.String(commandArgsFlag, "", "The space separated arguments for the command")
 
 	// Verbose
 	cli.InitVerboseFlags(flag)
@@ -144,14 +129,29 @@ func checkConfig(v *viper.Viper) error {
 		return errors.Wrap(&errInvalidAccountID{AwsAccountID: awsAccountID}, fmt.Sprintf("%q is invalid", awsAccountIDFlag))
 	}
 
-	region := v.GetString(awsRegionFlag)
-	if len(region) == 0 {
-		return errors.Wrap(&errInvalidRegion{Region: region}, fmt.Sprintf("%q is invalid", awsRegionFlag))
+	region, err := cli.CheckAWSRegion(v)
+	if err != nil {
+		return errors.Wrap(err, fmt.Sprintf("'%q' is invalid", cli.AWSRegionFlag))
 	}
 
-	regions := endpoints.AwsPartition().Services()[ecs.ServiceName].Regions()
-	if _, ok := regions[region]; !ok {
-		return errors.Wrap(&errInvalidRegion{Region: region}, fmt.Sprintf("%q is invalid", awsRegionFlag))
+	if err := cli.CheckAWSRegionForService(region, cloudwatchevents.ServiceName); err != nil {
+		return errors.Wrap(err, fmt.Sprintf("'%q' is invalid for service %s", cli.AWSRegionFlag, ecs.ServiceName))
+	}
+
+	if err := cli.CheckAWSRegionForService(region, ecs.ServiceName); err != nil {
+		return errors.Wrap(err, fmt.Sprintf("'%q' is invalid for service %s", cli.AWSRegionFlag, ecs.ServiceName))
+	}
+
+	if err := cli.CheckAWSRegionForService(region, ecr.ServiceName); err != nil {
+		return errors.Wrap(err, fmt.Sprintf("'%q' is invalid for service %s", cli.AWSRegionFlag, ecs.ServiceName))
+	}
+
+	if err := cli.CheckAWSRegionForService(region, rds.ServiceName); err != nil {
+		return errors.Wrap(err, fmt.Sprintf("'%q' is invalid for service %s", cli.AWSRegionFlag, ecs.ServiceName))
+	}
+
+	if err := cli.CheckVault(v); err != nil {
+		return err
 	}
 
 	chamberRetries := v.GetInt(chamberRetriesFlag)
@@ -224,11 +224,6 @@ func checkConfig(v *viper.Viper) error {
 		return errors.Wrap(&errInvalidCommand{Command: commandName}, fmt.Sprintf("%q is invalid", commandFlag))
 	}
 
-	err := cli.CheckEIA(v)
-	if err != nil {
-		return err
-	}
-
 	return nil
 }
 
@@ -241,45 +236,55 @@ func quit(logger *log.Logger, flag *pflag.FlagSet, err error) {
 	os.Exit(1)
 }
 
-// getAWSCredentials uses aws-vault to return AWS credentials
-func getAWSCredentials(keychainName string, keychainProfile string) (*credentials.Credentials, error) {
-
-	// Open the keyring which holds the credentials
-	ring, err := keyring.Open(keyring.Config{
-		ServiceName:              "aws-vault",
-		AllowedBackends:          []keyring.BackendType{keyring.KeychainBackend},
-		KeychainName:             keychainName,
-		KeychainTrustApplication: true,
-	})
-	if err != nil {
-		return nil, errors.Wrap(err, "Unable to configure and open keyring")
+func buildContainerEnvironment(v *viper.Viper, environmentName string, dbHost string) []*ecs.KeyValuePair {
+	chamberKMSKeyAlias := v.GetString(chamberKMSKeyAliasFlag)
+	chamberUsePaths := v.GetInt(chamberUsePathsFlag)
+	return []*ecs.KeyValuePair{
+		{
+			Name:  aws.String("CHAMBER_KMS_KEY_ALIAS"),
+			Value: aws.String(chamberKMSKeyAlias),
+		},
+		{
+			Name:  aws.String("CHAMBER_USE_PATHS"),
+			Value: aws.String(strconv.Itoa(chamberUsePaths)),
+		},
+		{
+			Name:  aws.String("DB_ENV"),
+			Value: aws.String(cli.DbEnvContainer),
+		},
+		{
+			Name:  aws.String("LOGGING_ENV"),
+			Value: aws.String(cli.LoggingEnvProduction),
+		},
+		{
+			Name:  aws.String("ENVIRONMENT"),
+			Value: aws.String(environmentName),
+		},
+		{
+			Name:  aws.String("DB_HOST"),
+			Value: aws.String(dbHost),
+		},
+		{
+			Name:  aws.String("DB_PORT"),
+			Value: aws.String(os.Getenv("DB_PORT")),
+		},
+		{
+			Name:  aws.String("DB_USER"),
+			Value: aws.String(os.Getenv("DB_USER")),
+		},
+		{
+			Name:  aws.String("DB_NAME"),
+			Value: aws.String(os.Getenv("DB_NAME")),
+		},
+		{
+			Name:  aws.String("DB_SSL_MODE"),
+			Value: aws.String(os.Getenv("DB_SSL_MODE")),
+		},
+		{
+			Name:  aws.String("DB_SSL_ROOT_CERT"),
+			Value: aws.String(os.Getenv("DB_SSL_ROOT_CERT")),
+		},
 	}
-
-	// Prepare options for the vault before creating the provider
-	vConfig, err := vault.LoadConfigFromEnv()
-	if err != nil {
-		return nil, errors.Wrap(err, "Unable to load AWS config from environment")
-	}
-	vOptions := vault.VaultOptions{
-		Config:    vConfig,
-		MfaPrompt: prompt.Method("terminal"),
-	}
-	vOptions = vOptions.ApplyDefaults()
-	err = vOptions.Validate()
-	if err != nil {
-		return nil, errors.Wrap(err, "Unable to validate aws-vault options")
-	}
-
-	// Get a new provider to retrieve the credentials
-	provider, err := vault.NewVaultProvider(ring, keychainProfile, vOptions)
-	if err != nil {
-		return nil, errors.Wrap(err, "Unable to create aws-vault provider")
-	}
-	credVals, err := provider.Retrieve()
-	if err != nil {
-		return nil, errors.Wrap(err, "Unable to retrieve aws credentials from aws-vault")
-	}
-	return credentials.NewStaticCredentialsFromCreds(credVals), nil
 }
 
 func main() {
@@ -314,25 +319,12 @@ func main() {
 
 	checkConfigErr := checkConfig(v)
 	if checkConfigErr != nil {
-		quit(logger, flag, err)
+		quit(logger, flag, checkConfigErr)
 	}
 
-	awsRegion := v.GetString(awsRegionFlag)
-
-	awsConfig := &aws.Config{
-		Region: aws.String(awsRegion),
-	}
-
-	keychainName := v.GetString(awsVaultKeychainNameFlag)
-	keychainProfile := v.GetString(awsProfileFlag)
-
-	if len(keychainName) > 0 && len(keychainProfile) > 0 {
-		creds, getAWSCredsErr := getAWSCredentials(keychainName, keychainProfile)
-		if getAWSCredsErr != nil {
-			quit(logger, nil, errors.Wrap(getAWSCredsErr, fmt.Sprintf("Unable to get AWS credentials from the keychain %s and profile %s", keychainName, keychainProfile)))
-		}
-		awsConfig.CredentialsChainVerboseErrors = aws.Bool(verbose)
-		awsConfig.Credentials = creds
+	awsConfig, err := cli.GetAWSConfig(v, verbose)
+	if err != nil {
+		quit(logger, nil, err)
 	}
 
 	sess, err := awssession.NewSession(awsConfig)
@@ -348,6 +340,10 @@ func main() {
 
 	// Get the current task definition (for rollback)
 	commandName := v.GetString(commandFlag)
+	commandArgs := []string{}
+	if str := v.GetString(commandArgsFlag); len(str) > 0 {
+		commandArgs = strings.Split(str, " ")
+	}
 	ruleName := fmt.Sprintf("%s-%s", commandName, v.GetString(environmentFlag))
 	targetsOutput, err := serviceCloudWatchEvents.ListTargetsByRule(&cloudwatchevents.ListTargetsByRuleInput{
 		Rule: aws.String(ruleName),
@@ -377,6 +373,7 @@ func main() {
 	currentTaskDef := *currentDescribeTaskDefinitionOutput.TaskDefinition
 
 	// Confirm the image exists
+	awsRegion := v.GetString(cli.AWSRegionFlag)
 	imageTag := v.GetString(imageTagFlag)
 	registryID := v.GetString(awsAccountIDFlag)
 	repositoryName := v.GetString(repositoryNameFlag)
@@ -417,81 +414,31 @@ func main() {
 	// Chamber Settings
 	chamberBinary := v.GetString(chamberBinaryFlag)
 	chamberRetries := v.GetInt(chamberRetriesFlag)
-	chamberKMSKeyAlias := v.GetString(chamberKMSKeyAliasFlag)
-	chamberUsePaths := v.GetInt(chamberUsePathsFlag)
 	chamberStore := fmt.Sprintf("%s-%s", serviceName, environmentName)
 
-	// Tool Settings
-	eiaKey := v.GetString(cli.EIAKeyFlag)
-	eiaURL := v.GetString(cli.EIAURLFlag)
+	entryPoint := []string{
+		chamberBinary,
+		"-r",
+		strconv.Itoa(chamberRetries),
+		"exec",
+		chamberStore,
+		"--",
+		fmt.Sprintf("/bin/%s", commandName),
+	}
+	if len(commandArgs) > 0 {
+		entryPoint = append(entryPoint, commandArgs...)
+	}
 
 	// Register the new task definition
 	newTaskDefOutput, err := serviceECS.RegisterTaskDefinition(&ecs.RegisterTaskDefinitionInput{
 		ContainerDefinitions: []*ecs.ContainerDefinition{
 			{
-				Name:      aws.String(containerDefName),
-				Image:     aws.String(imageName),
-				Essential: aws.Bool(true),
-				EntryPoint: []*string{
-					aws.String(chamberBinary),
-					aws.String("-r"),
-					aws.String(strconv.Itoa(chamberRetries)),
-					aws.String("exec"),
-					aws.String(chamberStore),
-					aws.String("--"),
-					aws.String(fmt.Sprintf("/bin/%s", commandName)),
-				},
-				Command: []*string{},
-				Environment: []*ecs.KeyValuePair{
-					{
-						Name:  aws.String("ENV"),
-						Value: aws.String("container"),
-					},
-					{
-						Name:  aws.String("ENVIRONMENT"),
-						Value: aws.String(environmentName),
-					},
-					{
-						Name:  aws.String("DB_HOST"),
-						Value: aws.String(dbHost),
-					},
-					{
-						Name:  aws.String("DB_PORT"),
-						Value: aws.String("5432"),
-					},
-					{
-						Name:  aws.String("DB_USER"),
-						Value: aws.String("master"),
-					},
-					{
-						Name:  aws.String("DB_NAME"),
-						Value: aws.String("app"),
-					},
-					{
-						Name:  aws.String("DB_SSL_MODE"),
-						Value: aws.String("verify-full"),
-					},
-					{
-						Name:  aws.String("DB_SSL_ROOT_CERT"),
-						Value: aws.String("/bin/rds-combined-ca-bundle.pem"),
-					},
-					{
-						Name:  aws.String("CHAMBER_KMS_KEY_ALIAS"),
-						Value: aws.String(chamberKMSKeyAlias),
-					},
-					{
-						Name:  aws.String("CHAMBER_USE_PATHS"),
-						Value: aws.String(strconv.Itoa(chamberUsePaths)),
-					},
-					{
-						Name:  aws.String("EIA_KEY"),
-						Value: aws.String(eiaKey),
-					},
-					{
-						Name:  aws.String("EIA_URL"),
-						Value: aws.String(eiaURL),
-					},
-				},
+				Name:        aws.String(containerDefName),
+				Image:       aws.String(imageName),
+				Essential:   aws.Bool(true),
+				EntryPoint:  aws.StringSlice(entryPoint),
+				Command:     []*string{},
+				Environment: buildContainerEnvironment(v, environmentName, dbHost),
 				LogConfiguration: &ecs.LogConfiguration{
 					LogDriver: aws.String("awslogs"),
 					Options: map[string]*string{

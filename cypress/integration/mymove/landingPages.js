@@ -72,12 +72,6 @@ describe('testing landing pages', function() {
     hhgDeliveredOrCompletedMoveSummary('3339dd2a-a23f-4967-a035-3bc9987c6848');
   });
 
-  // HHG: COMPLETED
-  it('tests completed HHG', function() {
-    // hhg@com.pleted
-    hhgDeliveredOrCompletedMoveSummary('4449dd2a-a23f-4967-a035-3bc9987c6848');
-  });
-
   // HHG: CANCELED
   it('tests canceled HHG', function() {
     // hhg@cancel.ed
@@ -110,6 +104,7 @@ function ppmApproved(userId) {
 
 function ppmPaymentRequested(userId) {
   cy.signInAsUserPostRequest(milmoveAppName, userId);
+  cy.setFeatureFlag('ppmPaymentRequest=false', '/');
   cy.contains('Move your own stuff (PPM)');
   cy.contains('Your payment is in review');
   cy.contains('You will receive a notification from your destination PPPO office when it has been reviewed.');

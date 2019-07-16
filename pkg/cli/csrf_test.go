@@ -1,6 +1,6 @@
 package cli
 
 func (suite *cliTestSuite) TestConfigCSRF() {
-	suite.Setup(InitCSRFFlags)
-	suite.Nil(CheckCSRF(suite.viper))
+	suite.Setup(InitCSRFFlags, []string{})
+	suite.NoError(CheckCSRF(suite.viper))
 }

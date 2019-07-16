@@ -45,7 +45,7 @@ export function fetchActiveShipment(shipments) {
     find(shipments, i =>
       includes(
         // For now, this include all statuses, but this may be re-evaluated in the future.
-        ['DRAFT', 'SUBMITTED', 'AWARDED', 'ACCEPTED', 'APPROVED', 'IN_TRANSIT', 'DELIVERED', 'COMPLETED'],
+        ['DRAFT', 'SUBMITTED', 'AWARDED', 'ACCEPTED', 'APPROVED', 'IN_TRANSIT', 'DELIVERED'],
         get(i, 'status'),
       ),
     ) || null
@@ -115,4 +115,13 @@ export function humanReadableError(errors) {
   return Object.entries(errors)
     .map(error => `${snakeCaseToCapitals(error[0])} ${error[1]}`)
     .join('/n');
+}
+
+export function detectIE11() {
+  let sAgent = window.navigator.userAgent;
+  let Idx = sAgent.indexOf('Trident');
+  if (Idx > -1) {
+    return true;
+  }
+  return false;
 }

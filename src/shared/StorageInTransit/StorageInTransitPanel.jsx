@@ -10,12 +10,17 @@ import BasicPanel from 'shared/BasicPanel';
 import Alert from 'shared/Alert';
 import StorageInTransit from 'shared/StorageInTransit/StorageInTransit';
 import Creator from 'shared/StorageInTransit/Creator';
-import { selectStorageInTransits, createStorageInTransit } from 'shared/Entities/modules/storageInTransits';
-import { loadEntitlements } from '../../scenes/TransportationServiceProvider/ducks';
+import {
+  selectStorageInTransits,
+  createStorageInTransit,
+  deleteStorageInTransit,
+} from 'shared/Entities/modules/storageInTransits';
+import { calculateEntitlementsForShipment } from 'shared/Entities/modules/shipments';
 import { calculateEntitlementsForMove } from 'shared/Entities/modules/moves';
 
 import { isTspSite } from 'shared/constants.js';
 import SitStatusIcon from './SitStatusIcon';
+import { sitTotalDaysUsed } from 'shared/StorageInTransit/calculator';
 
 export class StorageInTransitPanel extends Component {
   constructor() {
@@ -39,12 +44,26 @@ export class StorageInTransitPanel extends Component {
     return this.props.createStorageInTransit(this.props.shipmentId, createPayload);
   };
 
+  onDelete = (shipmentId, storageInTransitId) => {
+    this.props
+      .deleteStorageInTransit(shipmentId, storageInTransitId)
+      .then(() => {
+        this.setState({ error: false });
+      })
+      .catch(() => {
+        this.setState({ error: true });
+      });
+  };
+
   render() {
     const { storageInTransitEntitlement, storageInTransits } = this.props;
     const { error, isCreatorActionable } = this.state;
-    const daysUsed = 0; // placeholder
-    const daysRemaining = storageInTransitEntitlement - daysUsed;
     const hasRequestedSIT = some(storageInTransits, sit => sit.status === 'REQUESTED');
+    const showSitDaysRemaining = some(
+      storageInTransits,
+      sit => sit.status === 'IN_SIT' || sit.status === 'DELIVERED' || sit.status === 'RELEASED',
+    );
+    const daysRemaining = storageInTransitEntitlement - sitTotalDaysUsed(storageInTransits);
 
     return (
       <div className="storage-in-transit-panel" data-cy="storage-in-transit-panel">
@@ -58,11 +77,19 @@ export class StorageInTransitPanel extends Component {
             </Alert>
           )}
           <div className="column-head">
-            Entitlement: {storageInTransitEntitlement} days <span className="unbold">({daysRemaining} remaining)</span>
+            Entitlement: {storageInTransitEntitlement} days
+            {showSitDaysRemaining && <span className="unbold"> ({daysRemaining} remaining)</span>}
           </div>
           {storageInTransits !== undefined &&
             storageInTransits.map(storageInTransit => {
-              return <StorageInTransit key={storageInTransit.id} storageInTransit={storageInTransit} />;
+              return (
+                <StorageInTransit
+                  key={storageInTransit.id}
+                  storageInTransit={storageInTransit}
+                  daysRemaining={daysRemaining}
+                  onDelete={this.onDelete}
+                />
+              );
             })}
           {isCreatorActionable &&
             isTspSite && <Creator onFormActivation={this.onFormActivation} saveStorageInTransit={this.onSubmit} />}
@@ -84,27 +111,28 @@ StorageInTransitPanel.propTypes = {
 // moveId is needed to find the entitlement on the Office side. It is
 // not needed to pull entitlement from the TSP side.
 // calculateEntitlementsForMove is a more up-to-date way of storing data
-function getStorageInTransitEntitlement(state, moveId) {
+function getStorageInTransitEntitlement(state, resourceId) {
   let storageInTransitEntitlement = 0;
   if (isTspSite) {
-    storageInTransitEntitlement = loadEntitlements(state).storage_in_transit;
+    storageInTransitEntitlement = calculateEntitlementsForShipment(state, resourceId).storage_in_transit;
   } else {
-    storageInTransitEntitlement = calculateEntitlementsForMove(state, moveId).storage_in_transit;
+    storageInTransitEntitlement = calculateEntitlementsForMove(state, resourceId).storage_in_transit;
   }
   return storageInTransitEntitlement;
 }
 
 function mapStateToProps(state, ownProps) {
-  const moveId = ownProps.moveId;
+  const resourceId = isTspSite ? ownProps.shipmentId : ownProps.moveId;
+
   return {
     storageInTransits: selectStorageInTransits(state, ownProps.shipmentId),
-    storageInTransitEntitlement: getStorageInTransitEntitlement(state, moveId),
+    storageInTransitEntitlement: getStorageInTransitEntitlement(state, resourceId),
     shipmentId: ownProps.shipmentId,
   };
 }
 
 function mapDispatchToProps(dispatch) {
-  return bindActionCreators({ createStorageInTransit }, dispatch);
+  return bindActionCreators({ createStorageInTransit, deleteStorageInTransit }, dispatch);
 }
 
 export default connect(mapStateToProps, mapDispatchToProps)(StorageInTransitPanel);

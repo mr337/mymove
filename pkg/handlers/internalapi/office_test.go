@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/go-openapi/strfmt"
+	"github.com/go-openapi/swag"
 
 	officeop "github.com/transcom/mymove/pkg/gen/internalapi/internaloperations/office"
 	"github.com/transcom/mymove/pkg/gen/internalmessages"
@@ -30,7 +31,7 @@ func (suite *HandlerSuite) TestApproveMoveHandler() {
 
 	// Move is submitted and saved
 	err := move.Submit(time.Now())
-	suite.Nil(err)
+	suite.NoError(err)
 	suite.Equal(models.MoveStatusSUBMITTED, move.Status, "expected Submitted")
 	suite.MustSave(&move)
 
@@ -62,7 +63,7 @@ func (suite *HandlerSuite) TestApproveMoveHandlerIncompleteOrders() {
 
 	// Move is submitted and saved
 	err := move.Submit(time.Now())
-	suite.Nil(err)
+	suite.NoError(err)
 	suite.Equal(models.MoveStatusSUBMITTED, move.Status, "expected Submitted")
 	suite.MustSave(&move)
 
@@ -109,20 +110,24 @@ func (suite *HandlerSuite) TestCancelMoveHandler() {
 	orders := testdatagen.MakeDefaultOrder(suite.DB())
 
 	selectedMoveType := models.SelectedMoveTypePPM
-	move, verrs, err := orders.CreateNewMove(suite.DB(), &selectedMoveType)
-	suite.Nil(err)
+	moveOptions := models.MoveOptions{
+		SelectedType: &selectedMoveType,
+		Show:         swag.Bool(true),
+	}
+	move, verrs, err := orders.CreateNewMove(suite.DB(), moveOptions)
+	suite.NoError(err)
 	suite.False(verrs.HasAny(), "failed to validate move")
 	officeUser := testdatagen.MakeDefaultOfficeUser(suite.DB())
-	suite.Nil(err)
+	suite.NoError(err)
 
 	// Move is submitted
 	err = move.Submit(time.Now())
-	suite.Nil(err)
+	suite.NoError(err)
 	suite.Equal(models.MoveStatusSUBMITTED, move.Status, "expected Submitted")
 
 	// And: Orders are submitted and saved on move
 	err = orders.Submit()
-	suite.Nil(err)
+	suite.NoError(err)
 	suite.Equal(models.OrderStatusSUBMITTED, orders.Status, "expected Submitted")
 	suite.MustSave(&orders)
 	move.Orders = orders

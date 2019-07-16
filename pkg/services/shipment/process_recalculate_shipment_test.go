@@ -1,18 +1,15 @@
 package shipment
 
 import (
-	"testing"
 	"time"
 
 	"github.com/gofrs/uuid"
-	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap"
 
 	"github.com/transcom/mymove/pkg/models"
 	"github.com/transcom/mymove/pkg/route"
 	"github.com/transcom/mymove/pkg/services/invoice"
 	"github.com/transcom/mymove/pkg/testdatagen"
-	"github.com/transcom/mymove/pkg/testingsuite"
 )
 
 // Deliver marks the Shipment request as Delivered. Must be IN TRANSIT state.
@@ -27,7 +24,7 @@ func helperForceDeliver(s *models.Shipment, actualDeliveryDate time.Time) error 
 	return nil
 }
 
-func (suite *ProcessRecalculateShipmentSuite) helperCreateShipmentAndPlanner() (*models.Shipment, *route.Planner) {
+func (suite *ShipmentServiceSuite) helperCreateShipmentAndPlanner() (*models.Shipment, *route.Planner) {
 	numTspUsers := 1
 	numShipments := 1
 	numShipmentOfferSplit := []int{1}
@@ -60,13 +57,13 @@ func (suite *ProcessRecalculateShipmentSuite) helperCreateShipmentAndPlanner() (
 	return &shipment, &planner
 }
 
-func (suite *ProcessRecalculateShipmentSuite) TestProcessRecalculateShipmentCall() {
+func (suite *ShipmentServiceSuite) TestProcessRecalculateShipmentCall() {
 
 	shipment, planner := suite.helperCreateShipmentAndPlanner()
 	shipmentID := shipment.ID
 
 	shipmentLineItems, err := models.FetchLineItemsByShipmentID(suite.DB(), &shipmentID)
-	suite.Nil(err)
+	suite.NoError(err)
 
 	shipment2, err := invoice.FetchShipmentForInvoice{DB: suite.DB()}.Call(shipmentID)
 	if err != nil {
@@ -86,7 +83,7 @@ func (suite *ProcessRecalculateShipmentSuite) TestProcessRecalculateShipmentCall
 		Logger: suite.logger,
 	}.Call(shipment, shipmentLineItems, *planner)
 	// TEST Validation: No date range records (return false)
-	suite.Nil(err)
+	suite.NoError(err)
 	suite.Equal(false, update)
 
 	id, err := uuid.NewV4()
@@ -100,21 +97,20 @@ func (suite *ProcessRecalculateShipmentSuite) TestProcessRecalculateShipmentCall
 	suite.MustCreate(suite.DB(), &recalculateRange)
 	fetchRecalculateRange, err := models.FetchShipmentRecalculateDates(suite.DB())
 	recalculateRange = *fetchRecalculateRange
-	suite.Nil(err)
+	suite.NoError(err)
 
 	//
-	// TEST: shipment is not in DELIVERED or COMPLETED state (return false)
+	// TEST: shipment is not in DELIVERED state (return false)
 	//
 
 	suite.NotEqual(models.ShipmentStatusDELIVERED, shipment.Status)
-	suite.NotEqual(models.ShipmentStatusCOMPLETED, shipment.Status)
 
 	update, err = ProcessRecalculateShipment{
 		DB:     suite.DB(),
 		Logger: suite.logger,
 	}.Call(shipment, shipmentLineItems, *planner)
-	// TEST Validation: shipment is not in DELIVERED or COMPLETED state (return false)
-	suite.Nil(err)
+	// TEST Validation: shipment is not in DELIVERED state (return false)
+	suite.NoError(err)
 	suite.Equal(false, update)
 
 	// Shipment is delivered
@@ -136,7 +132,7 @@ func (suite *ProcessRecalculateShipmentSuite) TestProcessRecalculateShipmentCall
 		Logger: suite.logger,
 	}.Call(shipment, shipmentLineItems, *planner)
 	// TEST Validation: shipment after date range (return false)
-	suite.Nil(err)
+	suite.NoError(err)
 	suite.Equal(false, update)
 
 	//
@@ -156,11 +152,11 @@ func (suite *ProcessRecalculateShipmentSuite) TestProcessRecalculateShipmentCall
 		Logger: suite.logger,
 	}.Call(shipment, shipmentLineItems, *planner)
 	// TEST Validation: Shipment missing base line item or line item was updated in date range (return true)
-	suite.Nil(err)
+	suite.NoError(err)
 	suite.Equal(true, update)
 
 	shipmentLineItems, err = models.FetchLineItemsByShipmentID(suite.DB(), &shipmentID)
-	suite.Nil(err)
+	suite.NoError(err)
 
 	shipment2, err = invoice.FetchShipmentForInvoice{DB: suite.DB()}.Call(shipmentID)
 	if err != nil {
@@ -174,7 +170,7 @@ func (suite *ProcessRecalculateShipmentSuite) TestProcessRecalculateShipmentCall
 	suite.MustSave(&recalculateRange)
 
 	fetchRecalculateRange, err = models.FetchShipmentRecalculateDates(suite.DB())
-	suite.Nil(err)
+	suite.NoError(err)
 	suite.NotNil(fetchRecalculateRange)
 
 	// Move Shipment.CreatedAt to date within range
@@ -187,25 +183,6 @@ func (suite *ProcessRecalculateShipmentSuite) TestProcessRecalculateShipmentCall
 		Logger: suite.logger,
 	}.Call(shipment, shipmentLineItems, *planner)
 	// TEST Validation:  Do not recalculate shipment all line items are up to date (return false)
-	suite.Nil(err)
+	suite.NoError(err)
 	suite.Equal(false, update)
-}
-
-type ProcessRecalculateShipmentSuite struct {
-	testingsuite.PopTestSuite
-	logger *zap.Logger
-}
-
-func (suite *ProcessRecalculateShipmentSuite) SetupTest() {
-	suite.DB().TruncateAll()
-}
-func TestProcessRecalculateShipmentSuite(t *testing.T) {
-	// Use a no-op logger during testing
-	logger := zap.NewNop()
-
-	hs := &ProcessRecalculateShipmentSuite{
-		PopTestSuite: testingsuite.NewPopTestSuite(),
-		logger:       logger,
-	}
-	suite.Run(t, hs)
 }

@@ -25,7 +25,7 @@ const (
 	AdminApp Application = "admin"
 )
 
-// IsTspApp returns true iff the request is for the office.move.mil host
+// IsTspApp returns true iff the request is for the tsp.move.mil host
 func (s *Session) IsTspApp() bool {
 	return s.ApplicationName == TspApp
 }
@@ -50,7 +50,7 @@ type Session struct {
 	ApplicationName Application
 	Hostname        string
 	IDToken         string
-	Disabled        bool
+	IsSuperuser     bool
 	UserID          uuid.UUID
 	Email           string
 	FirstName       string
@@ -67,9 +67,19 @@ func SetSessionInRequestContext(r *http.Request, session *Session) context.Conte
 	return context.WithValue(r.Context(), sessionContextKey, session)
 }
 
+// SetSessionInContext modifies the context to add the session data.
+func SetSessionInContext(ctx context.Context, session *Session) context.Context {
+	return context.WithValue(ctx, sessionContextKey, session)
+}
+
 // SessionFromRequestContext gets the reference to the Session stored in the request.Context()
 func SessionFromRequestContext(r *http.Request) *Session {
-	if session, ok := r.Context().Value(sessionContextKey).(*Session); ok {
+	return SessionFromContext(r.Context())
+}
+
+// SessionFromContext gets the reference to the Session stored in the request.Context()
+func SessionFromContext(ctx context.Context) *Session {
+	if session, ok := ctx.Value(sessionContextKey).(*Session); ok {
 		return session
 	}
 	return nil
@@ -88,6 +98,11 @@ func (s *Session) IsOfficeUser() bool {
 // IsTspUser checks whether the authenticated user is a TspUser
 func (s *Session) IsTspUser() bool {
 	return s.TspUserID != uuid.Nil
+}
+
+// IsAdminUser checks whether the authenticated user is an AdminUser
+func (s *Session) IsAdminUser() bool {
+	return s.IsSuperuser
 }
 
 // IsDpsUser checks whether the authenticated user is a DpsUser

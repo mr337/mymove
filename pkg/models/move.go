@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-openapi/swag"
 	"github.com/gobuffalo/pop"
 	"github.com/gobuffalo/validate"
 	"github.com/gobuffalo/validate/validators"
@@ -26,8 +27,6 @@ const (
 	MoveStatusSUBMITTED MoveStatus = "SUBMITTED"
 	// MoveStatusAPPROVED captures enum value "APPROVED"
 	MoveStatusAPPROVED MoveStatus = "APPROVED"
-	// MoveStatusCOMPLETED captures enum value "COMPLETED"
-	MoveStatusCOMPLETED MoveStatus = "COMPLETED"
 	// MoveStatusCANCELED captures enum value "CANCELED"
 	MoveStatusCANCELED MoveStatus = "CANCELED"
 )
@@ -78,6 +77,13 @@ type Move struct {
 	Status                  MoveStatus              `json:"status" db:"status"`
 	SignedCertifications    SignedCertifications    `has_many:"signed_certifications" order_by:"created_at desc"`
 	CancelReason            *string                 `json:"cancel_reason" db:"cancel_reason"`
+	Show                    *bool                   `json:"show" db:"show"`
+}
+
+// MoveOptions is used when creating new moves based on parameters
+type MoveOptions struct {
+	SelectedType *SelectedMoveType
+	Show         *bool
 }
 
 // Moves is not required by pop and may be deleted
@@ -153,20 +159,10 @@ func (m *Move) Approve() error {
 	return nil
 }
 
-// Complete Completes the Move
-func (m *Move) Complete() error {
-	if m.Status != MoveStatusAPPROVED {
-		return errors.Wrap(ErrInvalidTransition, "Complete")
-	}
-
-	m.Status = MoveStatusCOMPLETED
-	return nil
-}
-
 // Cancel cancels the Move and its associated PPMs
 func (m *Move) Cancel(reason string) error {
 	// We can cancel any move that isn't already complete.
-	if m.Status == MoveStatusCOMPLETED || m.Status == MoveStatusCANCELED {
+	if m.Status == MoveStatusCANCELED {
 		return errors.Wrap(ErrInvalidTransition, "Cancel")
 	}
 
@@ -369,10 +365,9 @@ func (m Move) CreateMovingExpenseDocument(
 	moveDocumentType MoveDocumentType,
 	title string,
 	notes *string,
-	requestedAmountCents unit.Cents,
-	paymentMethod string,
-	movingExpenseType MovingExpenseType,
-	moveType SelectedMoveType) (*MovingExpenseDocument, *validate.Errors, error) {
+	expenseDocument MovingExpenseDocument,
+	moveType SelectedMoveType,
+) (*MovingExpenseDocument, *validate.Errors, error) {
 
 	var newMovingExpenseDocument *MovingExpenseDocument
 	var responseError error
@@ -398,9 +393,12 @@ func (m Move) CreateMovingExpenseDocument(
 		newMovingExpenseDocument = &MovingExpenseDocument{
 			MoveDocumentID:       newMoveDocument.ID,
 			MoveDocument:         *newMoveDocument,
-			MovingExpenseType:    movingExpenseType,
-			RequestedAmountCents: requestedAmountCents,
-			PaymentMethod:        paymentMethod,
+			MovingExpenseType:    expenseDocument.MovingExpenseType,
+			RequestedAmountCents: expenseDocument.RequestedAmountCents,
+			PaymentMethod:        expenseDocument.PaymentMethod,
+			ReceiptMissing:       expenseDocument.ReceiptMissing,
+			StorageStartDate:     expenseDocument.StorageStartDate,
+			StorageEndDate:       expenseDocument.StorageEndDate,
 		}
 		verrs, err := db.ValidateAndCreate(newMovingExpenseDocument)
 		if err != nil || verrs.HasAny() {
@@ -415,6 +413,51 @@ func (m Move) CreateMovingExpenseDocument(
 	})
 
 	return newMovingExpenseDocument, responseVErrors, responseError
+}
+
+// CreateWeightTicketSetDocument creates a moving weight ticket document associated to a move and move document
+func (m Move) CreateWeightTicketSetDocument(
+	db *pop.Connection,
+	uploads Uploads,
+	personallyProcuredMoveID *uuid.UUID,
+	weightTicketSetDocument *WeightTicketSetDocument,
+	moveType SelectedMoveType) (*WeightTicketSetDocument, *validate.Errors, error) {
+
+	var responseError error
+	responseVErrors := validate.NewErrors()
+
+	db.Transaction(func(db *pop.Connection) error {
+		transactionError := errors.New("Rollback The transaction")
+
+		var newMoveDocument *MoveDocument
+		newMoveDocument, responseVErrors, responseError = m.createMoveDocumentWithoutTransaction(
+			db,
+			uploads,
+			personallyProcuredMoveID,
+			MoveDocumentTypeWEIGHTTICKETSET,
+			"weight_ticket_set",
+			&weightTicketSetDocument.VehicleNickname,
+			moveType)
+		if responseVErrors.HasAny() || responseError != nil {
+			return transactionError
+		}
+
+		weightTicketSetDocument.MoveDocument = *newMoveDocument
+		weightTicketSetDocument.MoveDocumentID = newMoveDocument.ID
+
+		verrs, err := db.ValidateAndCreate(weightTicketSetDocument)
+		if err != nil || verrs.HasAny() {
+			responseVErrors.Append(verrs)
+			responseError = errors.Wrap(err, "Error creating moving expense document")
+			weightTicketSetDocument = nil
+			return transactionError
+		}
+
+		return nil
+
+	})
+
+	return weightTicketSetDocument, responseVErrors, responseError
 }
 
 // CreatePPM creates a new PPM associated with this move
@@ -517,12 +560,18 @@ func GenerateLocator() string {
 // retry with a new record locator.
 func createNewMove(db *pop.Connection,
 	orders Order,
-	selectedType *SelectedMoveType) (*Move, *validate.Errors, error) {
+	moveOptions MoveOptions) (*Move, *validate.Errors, error) {
 
 	var stringSelectedType SelectedMoveType
-	if selectedType != nil {
-		stringSelectedType = SelectedMoveType(*selectedType)
+	if moveOptions.SelectedType != nil {
+		stringSelectedType = SelectedMoveType(*moveOptions.SelectedType)
 	}
+
+	show := swag.Bool(true)
+	if moveOptions.Show != nil {
+		show = moveOptions.Show
+	}
+
 	for i := 0; i < maxLocatorAttempts; i++ {
 		move := Move{
 			Orders:           orders,
@@ -530,6 +579,7 @@ func createNewMove(db *pop.Connection,
 			Locator:          GenerateLocator(),
 			SelectedMoveType: &stringSelectedType,
 			Status:           MoveStatusDRAFT,
+			Show:             show,
 		}
 		verrs, err := db.ValidateAndCreate(&move)
 		if verrs.HasAny() {

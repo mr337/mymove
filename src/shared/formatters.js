@@ -215,6 +215,15 @@ export function formatDateTimeWithTZ(date) {
   return moment(date, moment.ISO_8601, true).format('DD-MMM-YY HH:mm') + ` ${shortZone}`;
 }
 
+export function formatTimeAgo(date) {
+  if (!date) return undefined;
+
+  return moment(date)
+    .fromNow()
+    .replace('minute', 'min')
+    .replace(/a min\s/, '1 min ');
+}
+
 // truncate a number and return appropiate decimal places... (watch out for negitive numbers: floor(-5.1) === -6)
 // see test for examples of how this works
 export const truncateNumber = (num, decimalPlaces = 0) => {
@@ -239,4 +248,12 @@ export const addCommasToNumberString = (numOrString, decimalPlaces = 0) => {
     return `${wholeNumInt.toLocaleString()}.${decimalNum}`;
   }
   return wholeNumInt.toLocaleString();
+};
+
+// maps int to int with ordinal 1 -> 1st, 2 -> 2nd, 3rd ...
+export const formatToOrdinal = n => {
+  const s = ['th', 'st', 'nd', 'rd'];
+  const v = n % 100;
+  // eslint-disable-next-line security/detect-object-injection
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
 };

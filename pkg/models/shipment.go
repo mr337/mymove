@@ -35,8 +35,6 @@ const (
 	ShipmentStatusINTRANSIT ShipmentStatus = "IN_TRANSIT"
 	// ShipmentStatusDELIVERED captures enum value "DELIVERED"
 	ShipmentStatusDELIVERED ShipmentStatus = "DELIVERED"
-	// ShipmentStatusCOMPLETED captures enum value "COMPLETED"
-	ShipmentStatusCOMPLETED ShipmentStatus = "COMPLETED"
 )
 
 var (
@@ -53,6 +51,7 @@ var (
 		"ShipmentOffers.TransportationServiceProviderPerformance.TransportationServiceProvider",
 		"ShippingDistance.OriginAddress",
 		"ShippingDistance.DestinationAddress",
+		"StorageInTransits",
 	}
 )
 
@@ -86,6 +85,7 @@ type Shipment struct {
 	ShipmentOffers            ShipmentOffers           `has_many:"shipment_offers" order_by:"created_at desc"`
 	ServiceAgents             ServiceAgents            `has_many:"service_agents" order_by:"created_at desc"`
 	ShipmentLineItems         ShipmentLineItems        `has_many:"shipment_line_items" order_by:"created_at desc"`
+	StorageInTransits         StorageInTransits        `has_many:"storage_in_transits" order_by:"location desc, estimated_start_date"`
 
 	// dates
 	ActualPickupDate     *time.Time `json:"actual_pickup_date" db:"actual_pickup_date"`         // when shipment is scheduled to be picked up by the TSP
@@ -95,6 +95,7 @@ type Shipment struct {
 	RequestedPickupDate  *time.Time `json:"requested_pickup_date" db:"requested_pickup_date"`   // when shipment was originally scheduled to be picked up
 	OriginalDeliveryDate *time.Time `json:"original_delivery_date" db:"original_delivery_date"` // when shipment is to be delivered
 	OriginalPackDate     *time.Time `json:"original_pack_date" db:"original_pack_date"`         // when packing is to begin
+	ApproveDate          *time.Time `json:"approve_date" db:"approve_date"`                     // when shipment is approved by office user
 	SubmitDate           *time.Time `json:"submit_date" db:"submit_date"`                       // when shipment was submitted by SM
 
 	// calculated durations
@@ -294,11 +295,16 @@ func (s *Shipment) Reject() error {
 }
 
 // Approve marks the Shipment request as Approved. Must be in an Accepted state.
-func (s *Shipment) Approve() error {
+func (s *Shipment) Approve(approveDate time.Time) error {
 	if s.Status != ShipmentStatusACCEPTED {
-		return errors.Wrap(ErrInvalidTransition, "Approve")
+		return errors.Wrap(ErrInvalidTransition, "Approve - status change")
+	}
+
+	if s.ApproveDate != nil {
+		return errors.Wrap(ErrInvalidTransition, "Approve - approve date change")
 	}
 	s.Status = ShipmentStatusAPPROVED
+	s.ApproveDate = &approveDate
 	return nil
 }
 
@@ -323,22 +329,32 @@ func (s *Shipment) Pack(actualPackDate time.Time) error {
 }
 
 // Deliver marks the Shipment request as Delivered. Must be IN TRANSIT state.
-func (s *Shipment) Deliver(actualDeliveryDate time.Time) error {
+func (s *Shipment) Deliver(actualDeliveryDate time.Time) (err error) {
+	// deliver Shipment
 	if s.Status != ShipmentStatusINTRANSIT {
-		return errors.Wrap(ErrInvalidTransition, "Deliver")
+		return errors.Wrap(ErrInvalidTransition, "Deliver of shipment")
 	}
 	s.Status = ShipmentStatusDELIVERED
 	s.ActualDeliveryDate = &actualDeliveryDate
-	return nil
-}
 
-// Complete marks the Shipment request as Completed. Must be in a Delivered state.
-func (s *Shipment) Complete() error {
-	if s.Status != ShipmentStatusDELIVERED {
-		return errors.Wrap(ErrInvalidTransition, "Completed")
+	var sits []StorageInTransit
+	// deliver SITs
+	for _, sit := range s.StorageInTransits {
+		// only deliver DESTINATION Sits that are IN_SIT
+		if sit.Status == StorageInTransitStatusINSIT &&
+			sit.Location == StorageInTransitLocationDESTINATION {
+			err = sit.Deliver(actualDeliveryDate)
+			if err != nil {
+				return err
+			}
+			sits = append(sits, sit)
+		} else {
+			sits = append(sits, sit)
+		}
 	}
-	s.Status = ShipmentStatusCOMPLETED
-	return nil
+	s.StorageInTransits = sits
+
+	return err
 }
 
 // BeforeSave will run before each create/update of a Shipment.
@@ -599,7 +615,9 @@ func FetchShipmentsByTSP(tx *pop.Connection, tspID uuid.UUID, status []string, o
 
 	query := tx.Q().Eager(ShipmentListAssociationsDefault...).
 		Where("shipment_offers.transportation_service_provider_id = $1", tspID).
-		LeftJoin("shipment_offers", "shipments.id=shipment_offers.shipment_id")
+		LeftJoin("shipment_offers", "shipments.id=shipment_offers.shipment_id").
+		InnerJoin("moves", "shipments.move_id=moves.id").
+		Where("moves.show is true")
 
 	if len(status) > 0 {
 		statusStrings := make([]interface{}, len(status))
@@ -662,7 +680,6 @@ func FetchShipment(db *pop.Connection, session *auth.Session, id uuid.UUID) (*Sh
 func FetchShipmentByTSP(tx *pop.Connection, tspID uuid.UUID, shipmentID uuid.UUID) (*Shipment, error) {
 
 	shipments := []Shipment{}
-
 	err := tx.Eager(ShipmentAssociationsDefault...).
 		Where("shipment_offers.transportation_service_provider_id = $1 and shipments.id = $2", tspID, shipmentID).
 		LeftJoin("shipment_offers", "shipments.id=shipment_offers.shipment_id").
@@ -871,7 +888,7 @@ func (s *Shipment) SaveShipmentAndPricingInfo(db *pop.Connection, baselineLineIt
 	responseVErrors := validate.NewErrors()
 	var responseError error
 
-	db.Transaction(func(tx *pop.Connection) error {
+	saveAndPrice := func(tx *pop.Connection) error {
 		transactionError := errors.New("rollback")
 
 		verrs, err := tx.ValidateAndSave(&distanceCalculation)
@@ -907,9 +924,14 @@ func (s *Shipment) SaveShipmentAndPricingInfo(db *pop.Connection, baselineLineIt
 				return transactionError
 			}
 		}
-
 		return nil
-	})
+	}
+
+	if db.TX == nil {
+		responseError = db.Transaction(saveAndPrice)
+	} else {
+		responseError = saveAndPrice(db)
+	}
 
 	return responseVErrors, responseError
 }
@@ -949,8 +971,7 @@ func (s *Shipment) requireAnAcceptedTSP() bool {
 	if s.Status == ShipmentStatusACCEPTED ||
 		s.Status == ShipmentStatusAPPROVED ||
 		s.Status == ShipmentStatusINTRANSIT ||
-		s.Status == ShipmentStatusDELIVERED ||
-		s.Status == ShipmentStatusCOMPLETED {
+		s.Status == ShipmentStatusDELIVERED {
 		return true
 	}
 	return false

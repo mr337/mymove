@@ -1,6 +1,6 @@
 package cli
 
 func (suite *cliTestSuite) TestConfigPorts() {
-	suite.Setup(InitPortFlags)
-	suite.Nil(CheckPorts(suite.viper))
+	suite.Setup(InitPortFlags, []string{})
+	suite.NoError(CheckPorts(suite.viper))
 }

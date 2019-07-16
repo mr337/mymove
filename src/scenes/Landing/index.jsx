@@ -6,7 +6,7 @@ import { bindActionCreators } from 'redux';
 import { withLastLocation } from 'react-router-last-location';
 import { withContext } from 'shared/AppContext';
 
-import { MoveSummary } from './MoveSummary';
+import { MoveSummary, PPMAlert } from './MoveSummary';
 import { isHHGPPMComboMove } from 'scenes/Moves/Ppm/ducks';
 import { selectedMoveType, lastMoveIsCanceled } from 'scenes/Moves/ducks';
 import { getCurrentShipment } from 'shared/UI/ducks';
@@ -40,7 +40,6 @@ export class Landing extends Component {
       createServiceMember,
       isProfileComplete,
     } = this.props;
-
     if (loggedInUserSuccess) {
       if (!createdServiceMemberIsLoading && isEmpty(serviceMember) && !createdServiceMemberError) {
         // Once the logged in user loads, if the service member doesn't
@@ -98,11 +97,11 @@ export class Landing extends Component {
       loggedInUserIsLoading,
       loggedInUserSuccess,
       loggedInUserError,
-      hasSubmitSuccess,
       isProfileComplete,
-      isHHGPPMComboMove,
       createdServiceMemberError,
       moveSubmitSuccess,
+      hasSubmitSuccess,
+      isHHGPPMComboMove,
       entitlement,
       serviceMember,
       orders,
@@ -115,7 +114,7 @@ export class Landing extends Component {
     return (
       <div className="usa-grid">
         {loggedInUserIsLoading && <LoadingPlaceholder />}
-        {!isLoggedIn && <SignIn location={this.props.location} />}
+        {!isLoggedIn && !loggedInUserIsLoading && <SignIn location={this.props.location} />}
         {loggedInUserSuccess && (
           <Fragment>
             <div>
@@ -125,12 +124,8 @@ export class Landing extends Component {
                     You've submitted your move
                   </Alert>
                 )}
-              {isHHGPPMComboMove &&
-                hasSubmitSuccess && (
-                  <Alert type="success" heading="You've added a PPM shipment">
-                    Next, your shipment is awaiting approval and this can take up to 3 business days
-                  </Alert>
-                )}
+              {isHHGPPMComboMove && hasSubmitSuccess && <PPMAlert heading="Your PPM shipment is submitted" />}
+              {ppm && moveSubmitSuccess && <PPMAlert heading="Congrats - your move is submitted!" />}
               {loggedInUserError && (
                 <Alert type="error" heading="An error occurred">
                   There was an error loading your user information.
@@ -158,6 +153,7 @@ export class Landing extends Component {
                   resumeMove={this.resumeMove}
                   reviewProfile={this.reviewProfile}
                   requestPaymentSuccess={requestPaymentSuccess}
+                  moveSubmitSuccess={moveSubmitSuccess}
                   updateMove={updateMove}
                   addPPMShipment={this.addPPMShipment}
                 />

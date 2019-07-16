@@ -20,10 +20,67 @@ import WizardHeader from '../WizardHeader';
 import ppmBlack from 'shared/icon/ppm-black.svg';
 import './DateAndLocation.css';
 import { ProgressTimeline, ProgressTimelineStep } from 'shared/ProgressTimeline';
+import { GetPpmWeightEstimate } from './api';
+import { ValidateZipRateData } from 'shared/api';
 
 const sitEstimateDebounceTime = 300;
 const formName = 'ppp_date_and_location';
-const DateAndLocationWizardForm = reduxifyWizardForm(formName);
+
+const InvalidMoveParamsErrorMsg =
+  "We can't schedule a move that far in the future. You can try an earlier date, or contact your PPPO for help.";
+const UnsupportedZipCodeErrorMsg =
+  'Sorry, we don’t support that zip code yet. Please contact your local PPPO for assistance.';
+
+async function asyncValidate(values, dispatch, props, currentFieldName) {
+  const { pickup_postal_code, destination_postal_code, original_move_date } = values;
+
+  // If either postal code is blurred, check both of them for errors. We want to
+  // catch these before checking on dates via `GetPpmWeightEstimate`.
+  if (['destination_postal_code', 'pickup_postal_code'].includes(currentFieldName)) {
+    // eslint-disable-next-line security/detect-object-injection
+    const zipValue = values[currentFieldName];
+    if (zipValue && zipValue.length < 5) {
+      return;
+    }
+    const pickupZip = pickup_postal_code && pickup_postal_code.slice(0, 5);
+    const destinationZip = destination_postal_code && destination_postal_code.slice(0, 5);
+    const responseObject = {};
+    if (pickupZip) {
+      const responseBody = await ValidateZipRateData(pickupZip, 'origin');
+      if (!responseBody.valid) {
+        responseObject.pickup_postal_code = UnsupportedZipCodeErrorMsg;
+      }
+    }
+    if (destinationZip) {
+      const responseBody = await ValidateZipRateData(destinationZip, 'destination');
+      if (!responseBody.valid) {
+        responseObject.destination_postal_code = UnsupportedZipCodeErrorMsg;
+      }
+    }
+    if (responseObject.pickup_postal_code || responseObject.destination_postal_code) {
+      throw responseObject;
+    }
+  }
+
+  // If we have all valid postal codes and a move date, we can verify the rate engine
+  // data for the date, while assuming a very small weight (100) that should be covered in
+  // all SM weight entitlements.
+  const fakeLightWeight = 100;
+  if (pickup_postal_code && destination_postal_code && original_move_date) {
+    try {
+      await GetPpmWeightEstimate(original_move_date, pickup_postal_code, destination_postal_code, fakeLightWeight);
+    } catch (err) {
+      // eslint-disable-next-line no-throw-literal
+      throw { original_move_date: InvalidMoveParamsErrorMsg };
+    }
+  }
+}
+
+const DateAndLocationWizardForm = reduxifyWizardForm(formName, null, asyncValidate, [
+  'destination_postal_code',
+  'pickup_postal_code',
+  'original_move_date',
+]);
 
 const validateDifferentZip = (value, formValues) => {
   if (value && value === formValues.pickup_postal_code) {
@@ -110,7 +167,7 @@ export class DateAndLocation extends Component {
           />
         )}
         <DateAndLocationWizardForm
-          handleSubmit={this.handleSubmit}
+          reduxFormSubmit={this.handleSubmit}
           pageList={pages}
           pageKey={pageKey}
           serverError={error}

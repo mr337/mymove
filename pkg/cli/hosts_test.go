@@ -1,6 +1,6 @@
 package cli
 
 func (suite *cliTestSuite) TestConfigHosts() {
-	suite.Setup(InitHostFlags)
-	suite.Nil(CheckHosts(suite.viper))
+	suite.Setup(InitHostFlags, []string{})
+	suite.NoError(CheckHosts(suite.viper))
 }

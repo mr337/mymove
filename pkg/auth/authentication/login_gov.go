@@ -20,6 +20,7 @@ import (
 const milProviderName = "milProvider"
 const officeProviderName = "officeProvider"
 const tspProviderName = "tspProvider"
+const adminProviderName = "adminProvider"
 
 func getLoginGovProviderForRequest(r *http.Request) (*openidConnect.Provider, error) {
 	session := auth.SessionFromRequestContext(r)
@@ -28,6 +29,8 @@ func getLoginGovProviderForRequest(r *http.Request) (*openidConnect.Provider, er
 		providerName = officeProviderName
 	} else if session.IsTspApp() {
 		providerName = tspProviderName
+	} else if session.IsAdminApp() {
+		providerName = adminProviderName
 	}
 	gothProvider, err := goth.GetProvider(providerName)
 	if err != nil {
@@ -63,7 +66,7 @@ func (p LoginGovProvider) getOpenIDProvider(hostname string, clientID string, ca
 
 // RegisterProvider registers Login.gov with Goth, which uses
 // auto-discovery to get the OpenID configuration
-func (p LoginGovProvider) RegisterProvider(milHostname string, milClientID string, officeHostname string, officeClientID string, tspHostname string, tspClientID string, callbackProtocol string, callbackPort int) error {
+func (p LoginGovProvider) RegisterProvider(milHostname string, milClientID string, officeHostname string, officeClientID string, tspHostname string, tspClientID string, adminHostname string, adminClientID string, callbackProtocol string, callbackPort int) error {
 
 	milProvider, err := p.getOpenIDProvider(milHostname, milClientID, callbackProtocol, callbackPort)
 	if err != nil {
@@ -83,7 +86,13 @@ func (p LoginGovProvider) RegisterProvider(milHostname string, milClientID strin
 		return err
 	}
 	tspProvider.SetName(tspProviderName)
-	goth.UseProviders(milProvider, officeProvider, tspProvider)
+	adminProvider, err := p.getOpenIDProvider(adminHostname, adminClientID, callbackProtocol, callbackPort)
+	if err != nil {
+		p.logger.Error("getting open_id provider", zap.String("host", adminHostname), zap.Error(err))
+		return err
+	}
+	adminProvider.SetName(adminProviderName)
+	goth.UseProviders(milProvider, officeProvider, tspProvider, adminProvider)
 	return nil
 }
 
@@ -96,30 +105,37 @@ func generateNonce() string {
 	return base64.URLEncoding.EncodeToString(nonceBytes)
 }
 
+// LoginGovData contains the URL and State nonce used to redirect a user
+// login.gov for authentication
+type LoginGovData struct {
+	RedirectURL string
+	Nonce       string
+}
+
 // AuthorizationURL returns a URL for login.gov authorization with required params
-func (p LoginGovProvider) AuthorizationURL(r *http.Request) (string, error) {
+func (p LoginGovProvider) AuthorizationURL(r *http.Request) (*LoginGovData, error) {
 	provider, err := getLoginGovProviderForRequest(r)
 	if err != nil {
 		p.logger.Error("Get Goth provider", zap.Error(err))
-		return "", err
+		return nil, err
 	}
 	state := generateNonce()
 	sess, err := provider.BeginAuth(state)
 	if err != nil {
 		p.logger.Error("Goth begin auth", zap.Error(err))
-		return "", err
+		return nil, err
 	}
 
 	baseURL, err := sess.GetAuthURL()
 	if err != nil {
 		p.logger.Error("Goth get auth URL", zap.Error(err))
-		return "", err
+		return nil, err
 	}
 
 	authURL, err := url.Parse(baseURL)
 	if err != nil {
 		p.logger.Error("Parse auth URL", zap.Error(err))
-		return "", err
+		return nil, err
 	}
 
 	params := authURL.Query()
@@ -128,7 +144,7 @@ func (p LoginGovProvider) AuthorizationURL(r *http.Request) (string, error) {
 	params.Set("scope", "openid email")
 
 	authURL.RawQuery = params.Encode()
-	return authURL.String(), nil
+	return &LoginGovData{authURL.String(), state}, nil
 }
 
 // LogoutURL returns a full URL to log out of login.gov with required params
