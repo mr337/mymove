@@ -227,8 +227,8 @@ jobs:
           name: Install dependencies
           command: for i in $(seq 1 5); do go get && s=0 && break || s=$? && sleep 5; done; (exit $s)
       - run:
-          name: Build tools, downloading additional code
-          command: make build_tools
+          name: Make sure all of the server deps are downloaded
+          command: make server_deps
       - save_cache:
           key: go-mod-sources-v3-{{ checksum "go.sum" }}
           paths:
