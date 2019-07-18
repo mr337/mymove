@@ -42,8 +42,9 @@ func (v *ValidationErrorsResponse) WriteResponse(rw http.ResponseWriter, produce
 
 // ErrResponse collect errors and error codes
 type ErrResponse struct {
-	Code int
-	Err  error
+	Code        int
+	Err         error
+	UserMessage string
 }
 
 type clientMessage struct {
@@ -56,9 +57,17 @@ func newErrResponse(code int, err error) *ErrResponse {
 }
 
 // WriteResponse to the client
+func (o *ErrResponse) clientMessage() clientMessage {
+	if o.UserMessage != "" {
+		return clientMessage{o.UserMessage}
+	}
+	return clientMessage{o.Err.Error()}
+}
+
+// WriteResponse to the client
 func (o *ErrResponse) WriteResponse(rw http.ResponseWriter, producer runtime.Producer) {
 	rw.WriteHeader(o.Code)
-	json.NewEncoder(rw).Encode(clientMessage{o.Err.Error()})
+	json.NewEncoder(rw).Encode(o.clientMessage())
 }
 
 // ResponseForError logs an error and returns the expected error type
@@ -89,6 +98,37 @@ func ResponseForError(logger Logger, err error) middleware.Responder {
 		return newErrResponse(http.StatusInternalServerError, errors.New(SQLErrMessage))
 	default:
 		return responseForBaseError(skipLogger, err)
+	}
+}
+
+// ResponseForErrorWith logs an error and returns the expected error type
+func ResponseForErrorWithMessage(logger Logger, err error, msg string) middleware.Responder {
+	// AddCallerSkip(1) prevents log statements from listing this file and func as the caller
+	skipLogger := logger.WithOptions(zap.AddCallerSkip(1))
+
+	// Some code might pass an uninstantiated error for which we should throw a 500
+	// instead of throwing a nil pointer dereference.
+	if err == nil {
+		skipLogger.Error("unexpected error")
+		return newErrResponse(http.StatusInternalServerError, errors.New(NilErrMessage))
+	}
+
+	cause := errors.Cause(err)
+	switch e := cause.(type) {
+	case route.Error:
+		skipLogger.Info("Encountered error using route planner", zap.Error(e))
+		// Handle RouteError codes
+		switch e.Code() {
+		case route.UnsupportedPostalCode, route.UnroutableRoute:
+			return newErrResponse(http.StatusUnprocessableEntity, err, msg)
+		default:
+			return newErrResponse(http.StatusInternalServerError, err, msg)
+		}
+	case *pq.Error:
+		skipLogger.Info(SQLErrMessage, zap.Error(e))
+		return newErrResponse(http.StatusInternalServerError, errors.New(SQLErrMessage), msg)
+	default:
+		return responseForBaseError(skipLogger, err, msg)
 	}
 }
 

@@ -37,6 +37,20 @@ func payloadForInvoiceModel(a *models.Invoice) *apimessages.Invoice {
 	}
 }
 
+func errorResponseForInvoiceModel(err error, logger handlers.Logger) middleware.Responder {
+	message := "Error fetching invoice"
+	switch err {
+	case models.ErrFetchNotFound:
+		message = "Invoice not found"
+	case models.ErrFetchForbidden:
+		message = "User not permitted to access invoice"
+	case models.ErrUserUnauthorized:
+		message = "User not authorized to access invoice"
+	}
+	logger.Error(message, zap.Error(err))
+	return handlers.ResponseForErrorWithMessage(logger, err, message)
+}
+
 // GetInvoiceHandler returns an invoice
 type GetInvoiceHandler struct {
 	handlers.HandlerContext
@@ -54,18 +68,7 @@ func (h GetInvoiceHandler) Handle(params accessorialop.GetInvoiceParams) middlew
 	invoiceID, _ := uuid.FromString(params.InvoiceID.String())
 	invoice, err := models.FetchInvoice(h.DB(), session, invoiceID)
 	if err != nil {
-		if err == models.ErrFetchNotFound {
-			logger.Warn("Invoice not found", zap.Error(err))
-			return handlers.ResponseForError(logger, err)
-		} else if err == models.ErrFetchForbidden {
-			logger.Error("User not permitted to access invoice", zap.Error(err))
-			return handlers.ResponseForError(logger, err)
-		} else if err == models.ErrUserUnauthorized {
-			logger.Error("User not authorized to access invoice", zap.Error(err))
-			return handlers.ResponseForError(logger, err)
-		}
-		logger.Error("Error fetching invoice", zap.Error(err))
-		return handlers.ResponseForError(logger, err)
+		return errorResponseForInvoiceModel(err, logger)
 	}
 
 	payload := payloadForInvoiceModel(invoice)
