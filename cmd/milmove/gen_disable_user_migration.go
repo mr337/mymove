@@ -55,8 +55,8 @@ func initDisableUserMigrationFlags(flag *pflag.FlagSet) {
 	// Disable User
 	InitDisableUserFlags(flag)
 
-	// Sort command line flags
-	flag.SortFlags = true
+	// Don't sort command line flags
+	flag.SortFlags = false
 }
 
 // UserTemplate is a struct that stores the EmailPrefix from which to generate the migration
@@ -68,9 +68,8 @@ type UserTemplate struct {
 func CheckDisableUserFlags(v *viper.Viper) error {
 	email := v.GetString(DisableUserEmailFlag)
 	if len(email) == 0 {
-		return fmt.Errorf("-e is required")
+		return errors.Errorf("%s is missing", DisableUserEmailFlag)
 	}
-
 	return nil
 }
 

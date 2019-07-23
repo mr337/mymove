@@ -42,19 +42,19 @@ VALUES
 
 // OfficeUsersFilenameFlag initializes add_office_users command line flags
 func InitAddOfficeUsersFlags(flag *pflag.FlagSet) {
+	flag.StringP(MigrationFilenameFlag, "n", "", "File name of the migration files for the new office users")
 	flag.StringP(OfficeUsersFilenameFlag, "f", "", "File name of csv file containing the new office users")
-	flag.StringP(OfficeUsersMigrationFilenameFlag, "n", "", "File name of the migration files for the new office users")
 }
 
 // CheckAddOfficeUsers validates add_office_users command line flags
 func CheckAddOfficeUsers(v *viper.Viper) error {
 	officeUsersFileName := v.GetString(OfficeUsersFilenameFlag)
 	if officeUsersFileName == "" {
-		return fmt.Errorf("--office-users-filename is required")
+		return errors.Errorf("%s is missing", OfficeUsersFilenameFlag)
 	}
-	officeUsersMigrationFilenameFlag := v.GetString(OfficeUsersMigrationFilenameFlag)
+	officeUsersMigrationFilenameFlag := v.GetString(MigrationFilenameFlag)
 	if officeUsersMigrationFilenameFlag == "" {
-		return fmt.Errorf("--migration-filename is required")
+		return errors.Errorf("%s is missing", MigrationFilenameFlag)
 	}
 	return nil
 }
@@ -66,8 +66,8 @@ func initGenOfficeUserMigrationFlags(flag *pflag.FlagSet) {
 	// Add Office Users
 	InitAddOfficeUsersFlags(flag)
 
-	// Sort command line flags
-	flag.SortFlags = true
+	// Don't sort command line flags
+	flag.SortFlags = false
 }
 
 func ValidateOfficeUser(o *models.OfficeUser) (*validate.Errors, error) {
@@ -152,7 +152,7 @@ func genOfficeUserMigration(cmd *cobra.Command, args []string) error {
 	migrationsPath := v.GetString(cli.MigrationPathFlag)
 	migrationManifest := v.GetString(cli.MigrationManifestFlag)
 	officeUsersFileName := v.GetString(OfficeUsersFilenameFlag)
-	migrationFileName := v.GetString(OfficeUsersMigrationFilenameFlag)
+	migrationFileName := v.GetString(MigrationFilenameFlag)
 
 	officeUsers, err := readOfficeUsersCSV(officeUsersFileName)
 	if err != nil {

@@ -10,8 +10,8 @@ import (
 )
 
 const (
-	// OfficeUsersMigrationFile sql file containing the migration to add the new office users
-	OfficeUsersMigrationFilenameFlag string = "migration-filename"
+	// MigrationFilenameFlag is the sql file containing the migration
+	MigrationFilenameFlag string = "migration-filename"
 
 	// VersionTimeFormat is the Go time format for creating a version number.
 	VersionTimeFormat string = "20060102150405"
