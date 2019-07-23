@@ -66,6 +66,14 @@ type UserTemplate struct {
 }
 
 func CheckDisableUserFlags(v *viper.Viper) error {
+	if err := cli.CheckMigration(v); err != nil {
+		return err
+	}
+
+	if err := cli.CheckMigrationFile(v); err != nil {
+		return err
+	}
+
 	email := v.GetString(DisableUserEmailFlag)
 	if len(email) == 0 {
 		return errors.Errorf("%s is missing", DisableUserEmailFlag)

@@ -48,6 +48,14 @@ func InitAddOfficeUsersFlags(flag *pflag.FlagSet) {
 
 // CheckAddOfficeUsers validates add_office_users command line flags
 func CheckAddOfficeUsers(v *viper.Viper) error {
+	if err := cli.CheckMigration(v); err != nil {
+		return err
+	}
+
+	if err := cli.CheckMigrationFile(v); err != nil {
+		return err
+	}
+
 	officeUsersFileName := v.GetString(OfficeUsersFilenameFlag)
 	if officeUsersFileName == "" {
 		return errors.Errorf("%s is missing", OfficeUsersFilenameFlag)
