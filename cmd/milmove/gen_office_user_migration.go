@@ -29,13 +29,7 @@ import (
 const (
 	// OfficeUsersFilenameFlag filename containing the details for new office users
 	OfficeUsersFilenameFlag string = "office-users-filename"
-	// OfficeUsersMigrationFile sql file containing the migration to add the new office users
-	OfficeUsersMigrationFilenameFlag string = "migration-filename"
-	// VersionTimeFormat is the Go time format for creating a version number.
-	VersionTimeFormat string = "20060102150405"
-)
 
-const (
 	// template for adding office users
 	createOfficeUser string = `INSERT INTO public.office_users
 (id, user_id, first_name, last_name, middle_initials, email, telephone, transportation_office_id, created_at, updated_at)
@@ -44,9 +38,6 @@ VALUES
 {{ if $i}},{{end}}('{{$e.ID}}', NULL, '{{$e.FirstName}}', '{{$e.LastName}}', {{if .MiddleInitials}}'{{.MiddleInitials}}'{{else}}NULL{{end}}, '{{$e.Email}}', '{{$e.Telephone}}', '{{$e.TransportationOfficeID}}', now(), now())
 {{- end}};
 `
-
-	// template to apply secure migration
-	migration string = `exec("./apply-secure-migration.sh {{.}}")`
 )
 
 // OfficeUsersFilenameFlag initializes add_office_users command line flags
@@ -142,29 +133,6 @@ func readOfficeUsersCSV(fileName string) ([]models.OfficeUser, error) {
 	return officeUsers, nil
 }
 
-func closeFile(outfile *os.File) {
-	err := outfile.Close()
-	if err != nil {
-		log.Printf("error closing %s: %v\n", outfile.Name(), err)
-		os.Exit(1)
-	}
-}
-
-func createMigration(path string, filename string, t *template.Template, templateData interface{}) error {
-	migrationPath := filepath.Join(path, filename)
-	migrationFile, err := os.Create(migrationPath)
-	defer closeFile(migrationFile)
-	if err != nil {
-		return errors.Wrapf(err, "error creating %s", migrationPath)
-	}
-	err = t.Execute(migrationFile, templateData)
-	if err != nil {
-		log.Println("error executing template: ", err)
-	}
-	log.Printf("new migration file created at:  %q\n", migrationPath)
-	return nil
-}
-
 func genOfficeUserMigration(cmd *cobra.Command, args []string) error {
 	err := cmd.ParseFlags(args)
 	flag := cmd.Flags()
@@ -193,7 +161,7 @@ func genOfficeUserMigration(cmd *cobra.Command, args []string) error {
 
 	secureMigrationName := fmt.Sprintf("%s_%s.up.sql", time.Now().Format(VersionTimeFormat), migrationFileName)
 	t1 := template.Must(template.New("add_office_user").Parse(createOfficeUser))
-	err = createMigration("./tmp", secureMigrationName, t1, officeUsers)
+	err = createMigration(tempMigrationPath, secureMigrationName, t1, officeUsers)
 	if err != nil {
 		return err
 	}
@@ -206,7 +174,7 @@ func genOfficeUserMigration(cmd *cobra.Command, args []string) error {
 	log.Printf("new migration file created at:  %q\n", localMigrationPath)
 
 	migrationName := fmt.Sprintf("%s_%s.up.fizz", time.Now().Format(VersionTimeFormat), migrationFileName)
-	t2 := template.Must(template.New("migration").Parse(migration))
+	t2 := template.Must(template.New("migration").Parse(secureMigrationTemplate))
 	err = createMigration(migrationsPath, migrationName, t2, secureMigrationName)
 	if err != nil {
 		return err

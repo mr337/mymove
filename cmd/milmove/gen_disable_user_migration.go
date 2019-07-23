@@ -104,7 +104,7 @@ func genDisableUserMigration(cmd *cobra.Command, args []string) error {
 
 	secureMigrationName := fmt.Sprintf("%s_%s.up.sql", time.Now().Format(VersionTimeFormat), migrationFileName)
 	t1 := template.Must(template.New("disable_user").Parse(disableUser))
-	err = createMigration("./tmp", secureMigrationName, t1, user)
+	err = createMigration(tempMigrationPath, secureMigrationName, t1, user)
 	if err != nil {
 		return err
 	}
@@ -117,7 +117,7 @@ func genDisableUserMigration(cmd *cobra.Command, args []string) error {
 	log.Printf("new migration file created at:  %q\n", localMigrationPath)
 
 	migrationName := fmt.Sprintf("%s_%s.up.fizz", time.Now().Format(VersionTimeFormat), migrationFileName)
-	t2 := template.Must(template.New("migration").Parse(migration))
+	t2 := template.Must(template.New("migration").Parse(secureMigrationTemplate))
 	err = createMigration(migrationsPath, migrationName, t2, secureMigrationName)
 	if err != nil {
 		return err
