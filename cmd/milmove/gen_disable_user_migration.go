@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 	"text/template"
-	"time"
 
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -51,6 +50,9 @@ func InitDisableUserFlags(flag *pflag.FlagSet) {
 func initDisableUserMigrationFlags(flag *pflag.FlagSet) {
 	// Migration Config
 	cli.InitMigrationFlags(flag)
+
+	// Migration File Config
+	cli.InitMigrationFileFlags(flag)
 
 	// Disable User
 	InitDisableUserFlags(flag)
@@ -96,7 +98,9 @@ func genDisableUserMigration(cmd *cobra.Command, args []string) error {
 
 	migrationsPath := v.GetString(cli.MigrationPathFlag)
 	migrationManifest := v.GetString(cli.MigrationManifestFlag)
-	migrationFileName := "disable_user"
+	// migrationName := v.GetString(cli.MigrationNameFlag)
+	migrationName := "disable_user"
+	migrationVersion := v.GetString(cli.MigrationVersionFlag)
 	migrationEmail := strings.Split(v.GetString(DisableUserEmailFlag), "@")
 
 	err = CheckDisableUserFlags(v)
@@ -109,7 +113,7 @@ func genDisableUserMigration(cmd *cobra.Command, args []string) error {
 
 	user := UserTemplate{EmailPrefix: emailPrefix, EmailDomain: emailDomain}
 
-	secureMigrationName := fmt.Sprintf("%s_%s.up.sql", time.Now().Format(VersionTimeFormat), migrationFileName)
+	secureMigrationName := fmt.Sprintf("%s_%s.up.sql", migrationVersion, migrationName)
 	t1 := template.Must(template.New("disable_user").Parse(disableUser))
 	err = createMigration(tempMigrationPath, secureMigrationName, t1, user)
 	if err != nil {
@@ -123,14 +127,14 @@ func genDisableUserMigration(cmd *cobra.Command, args []string) error {
 	}
 	log.Printf("new migration file created at:  %q\n", localMigrationPath)
 
-	migrationName := fmt.Sprintf("%s_%s.up.fizz", time.Now().Format(VersionTimeFormat), migrationFileName)
+	migrationFileName := fmt.Sprintf("%s_%s.up.fizz", migrationVersion, migrationName)
 	t2 := template.Must(template.New("migration").Parse(secureMigrationTemplate))
-	err = createMigration(migrationsPath, migrationName, t2, secureMigrationName)
+	err = createMigration(migrationsPath, migrationFileName, t2, secureMigrationName)
 	if err != nil {
 		return err
 	}
 
-	err = addMigrationToManifest(migrationManifest, migrationName)
+	err = addMigrationToManifest(migrationManifest, migrationFileName)
 	if err != nil {
 		return err
 	}

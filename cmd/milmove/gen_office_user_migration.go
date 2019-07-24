@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"strings"
 	"text/template"
-	"time"
 
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -42,7 +41,6 @@ VALUES
 
 // OfficeUsersFilenameFlag initializes add_office_users command line flags
 func InitAddOfficeUsersFlags(flag *pflag.FlagSet) {
-	flag.StringP(MigrationFilenameFlag, "n", "", "File name of the migration files for the new office users")
 	flag.StringP(OfficeUsersFilenameFlag, "f", "", "File name of csv file containing the new office users")
 }
 
@@ -60,16 +58,15 @@ func CheckAddOfficeUsers(v *viper.Viper) error {
 	if officeUsersFileName == "" {
 		return errors.Errorf("%s is missing", OfficeUsersFilenameFlag)
 	}
-	officeUsersMigrationFilenameFlag := v.GetString(MigrationFilenameFlag)
-	if officeUsersMigrationFilenameFlag == "" {
-		return errors.Errorf("%s is missing", MigrationFilenameFlag)
-	}
 	return nil
 }
 
 func initGenOfficeUserMigrationFlags(flag *pflag.FlagSet) {
 	// Migration Config
 	cli.InitMigrationFlags(flag)
+
+	// Migration File Config
+	cli.InitMigrationFileFlags(flag)
 
 	// Add Office Users
 	InitAddOfficeUsersFlags(flag)
@@ -159,15 +156,16 @@ func genOfficeUserMigration(cmd *cobra.Command, args []string) error {
 	}
 	migrationsPath := v.GetString(cli.MigrationPathFlag)
 	migrationManifest := v.GetString(cli.MigrationManifestFlag)
+	migrationName := v.GetString(cli.MigrationNameFlag)
+	migrationVersion := v.GetString(cli.MigrationVersionFlag)
 	officeUsersFileName := v.GetString(OfficeUsersFilenameFlag)
-	migrationFileName := v.GetString(MigrationFilenameFlag)
 
 	officeUsers, err := readOfficeUsersCSV(officeUsersFileName)
 	if err != nil {
 		return errors.Wrap(err, "error reading csv file")
 	}
 
-	secureMigrationName := fmt.Sprintf("%s_%s.up.sql", time.Now().Format(VersionTimeFormat), migrationFileName)
+	secureMigrationName := fmt.Sprintf("%s_%s.up.sql", migrationVersion, migrationName)
 	t1 := template.Must(template.New("add_office_user").Parse(createOfficeUser))
 	err = createMigration(tempMigrationPath, secureMigrationName, t1, officeUsers)
 	if err != nil {
@@ -181,14 +179,14 @@ func genOfficeUserMigration(cmd *cobra.Command, args []string) error {
 	}
 	log.Printf("new migration file created at:  %q\n", localMigrationPath)
 
-	migrationName := fmt.Sprintf("%s_%s.up.fizz", time.Now().Format(VersionTimeFormat), migrationFileName)
+	migrationFileName := fmt.Sprintf("%s_%s.up.fizz", migrationVersion, migrationName)
 	t2 := template.Must(template.New("migration").Parse(secureMigrationTemplate))
-	err = createMigration(migrationsPath, migrationName, t2, secureMigrationName)
+	err = createMigration(migrationsPath, migrationFileName, t2, secureMigrationName)
 	if err != nil {
 		return err
 	}
 
-	err = addMigrationToManifest(migrationManifest, migrationName)
+	err = addMigrationToManifest(migrationManifest, migrationFileName)
 	if err != nil {
 		return err
 	}

@@ -10,12 +10,6 @@ import (
 )
 
 const (
-	// MigrationFilenameFlag is the sql file containing the migration
-	MigrationFilenameFlag string = "migration-filename"
-
-	// VersionTimeFormat is the Go time format for creating a version number.
-	VersionTimeFormat string = "20060102150405"
-
 	// secureMigrationTemplate is the template to apply secure migration
 	secureMigrationTemplate string = `exec("./apply-secure-migration.sh {{.}}")`
 
